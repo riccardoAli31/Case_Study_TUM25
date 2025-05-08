@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd 
+CONFIG_PATH = "data_preprocessing/configs.json"
 
 
 def load_party_manifesto_mapping(config_path: str) -> dict:
@@ -15,7 +16,7 @@ def load_party_manifesto_mapping(config_path: str) -> dict:
     return mapping
 
 
-def get_party_positions_data(file_dir, file_name, config_path, country) -> pd.DataFrame:
+def get_party_positions_data(file_dir, file_name, country) -> pd.DataFrame:
     """
     Load the party positions dataset and return rows that match a given country
     """
@@ -36,7 +37,7 @@ def get_party_positions_data(file_dir, file_name, config_path, country) -> pd.Da
     df_filtered = df_filtered.drop(columns=cols_to_drop).reset_index(drop=True)
     
     # Rename Manifesto variables 
-    mapping = load_party_manifesto_mapping(config_path)
+    mapping = load_party_manifesto_mapping(CONFIG_PATH)
     df_filtered.rename(columns=mapping, inplace=True)
 
     # Preprocessing dataframe - NaN values of numerical columns 
@@ -49,7 +50,6 @@ def get_party_positions_data(file_dir, file_name, config_path, country) -> pd.Da
     zero_share = (df_filtered[num_cols] == 0).sum() / len(df_filtered)  
     zero_cols_to_drop = zero_share[zero_share >= 0.80].index.tolist()
     df_filtered.drop(columns=zero_cols_to_drop, inplace=True)
-    print(f"Dropped {len(zero_cols_to_drop)} columns: {zero_cols_to_drop}")
 
     # Preprocessing dataframe - datatypes and awkward column names
     df_filtered["Calendar_Week"] = df_filtered["Calendar_Week"].astype(str)
