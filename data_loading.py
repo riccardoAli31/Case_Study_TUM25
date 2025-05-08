@@ -55,6 +55,11 @@ def get_gesis_data(path: str) -> pd.DataFrame:
     -------
     pd.DataFrame
         dataset loaded into a dataframe
+
+    Raises
+    ------
+    FileNotFoundError
+        file at *path* not found
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"file not found at: {path}")

@@ -4,7 +4,28 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 
-def preprocess_gesis(df: pd.DataFrame, columns: list=[], names: list=[], cutoff: int = 0):
+def preprocess_gesis(df: pd.DataFrame, columns: list=[], names: dict={}, cutoff: int = 0) -> tuple[pd.DataFrame, pd.Series]:
+    """preprocess gesis voter data, returning only columns specified in *columns* and change column names to *names*
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe of gesis data
+    columns : list, optional
+        all other columns are dropped, by default []
+    names : list, optional
+        new names for columns, by default []
+    cutoff : int, optional
+        all rows in which values are below are dropped, by default 0
+
+    Returns
+    -------
+    pd.DataFrame
+        preprocessed dataframe
+    pd.Series
+        how often each unique answer was given
+    """
+
     # drop all unfinished surveys
     df = df.drop(df[df["kp27_dispcode"] == 22].index).reset_index()
 
@@ -16,10 +37,7 @@ def preprocess_gesis(df: pd.DataFrame, columns: list=[], names: list=[], cutoff:
     df = df[df >= 0].reset_index(drop=True)
 
     # rename columns
-    if len(columns) == len(names):
-        df.columns = names
-    else:
-        raise ValueError("'columns' and 'names' need to have the same lenght.")
+    df.rename(names, inplace=True, axis=1)
 
     # how often each answer was given
     count = df.value_counts()
@@ -27,8 +45,16 @@ def preprocess_gesis(df: pd.DataFrame, columns: list=[], names: list=[], cutoff:
     return df, count
 
 
-def plot_scatter(count: pd.Series, normalize: bool=False):
-    # only 3d plot
+def plot_scatter(count: pd.Series, normalize: bool=False) -> None:
+    """plots 3d scatter of 2d policie space and how often each answer was given
+
+    Parameters
+    ----------
+    count : pd.Series
+        how often each unique answer was given
+    normalize : bool, optional
+        if values should be normalized to [0, 1], by default False
+    """
     x_min, x_max = count.index.levels[0].min(), count.index.levels[0].max()
     y_min, y_max = count.index.levels[1].min(), count.index.levels[1].max()
 
@@ -47,8 +73,23 @@ def plot_scatter(count: pd.Series, normalize: bool=False):
     plt.show()
 
 
-def do_regression(count: pd.Series, deg: int = 1, normalize: bool=False):
-    # only 2d feature space
+def do_regression(count: pd.Series, deg: int = 1, normalize: bool=False) -> LinearRegression:
+    """simple polynomial regression of degree *deg*
+
+    Parameters
+    ----------
+    count : pd.Series
+        how often each unique answer was given
+    deg : int, optional
+        degree of the polynomial, by default 1
+    normalize : bool, optional
+        if values should be normalized to [0,1] before fitting the model, by default False
+
+    Returns
+    -------
+    LinearRegression
+        fitted model
+    """
     poly = PolynomialFeatures(degree=deg)
 
     x_min, x_max = count.index.levels[0].min(), count.index.levels[0].max()
