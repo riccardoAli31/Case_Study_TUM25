@@ -1,44 +1,59 @@
 import os
-import pandas as pd
+import json
+import pandas as pd 
 
 
-def get_party_positions_data(file_dir, file_name, country: str) -> pd.DataFrame:
+def load_party_manifesto_mapping(config_path: str) -> dict:
     """
-    Load the party positions dataset and return rows that match a given *country* and *date_code* (e.g. 202109).
+    Pull the `manifesto_mapping` dict from the JSON config.
+    """
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    mapping = cfg.get("party_manifesto_mapping", {})
+    if not mapping:
+        raise KeyError("'party_manifesto_mapping' not found (or empty) in config.json")
+    return mapping
 
-    Parameters
-    ----------
-    csv_path : str or pathlib.Path
-        Full path to the MPDS CSV file.
-    country : str
-        Country name as it appears in the `countryname` column.
 
-    Returns
-    -------
-    pandas.DataFrame
-        Filtered dataframe
+def get_party_positions_data(file_dir, file_name, config_path, country) -> pd.DataFrame:
+    """
+    Load the party positions dataset and return rows that match a given country
     """
     csv_path = os.path.join(file_dir, file_name)
-
     if not os.path.isfile(csv_path):
         raise FileNotFoundError(f"CSV file not found at: {csv_path}")
 
     df = pd.read_csv(csv_path)
-
     # Filter by country and date
     df_filtered = df[df["countryname"] == country]
 
-    # Columns that aren’t needed for most analyses
-    cols_to_drop = ["country", "oecdmember", "eumember",
-        "party", "partyname", "parfam",
-        "candidatename", "coderid", "manual",
-        "coderyear", "id_perm", "testresult",
-        "testeditsim", "pervote", "voteest",
-        "presvote", "absseat", "totseats",
-        "progtype", "datasetorigin", "corpusversion",
-        "total", "peruncod"]
+    # Columns that aren’t needed for analysis
+    cols_to_drop = ["country", "oecdmember", "eumember", "party", "partyname", "parfam",
+        "candidatename", "coderid", "manual", "coderyear", "id_perm", "testresult",
+        "testeditsim", "pervote", "voteest", "presvote", "absseat", "totseats", "progtype", 
+        "datasetorigin", "corpusversion", "total", "peruncod", "datasetversion"]
     
     df_filtered = df_filtered.drop(columns=cols_to_drop).reset_index(drop=True)
+    
+    # Rename Manifesto variables 
+    mapping = load_party_manifesto_mapping(config_path)
+    df_filtered.rename(columns=mapping, inplace=True)
+
+    # Preprocessing dataframe - NaN values of numerical columns 
+    df_filtered = df_filtered.apply(pd.to_numeric, errors="ignore")
+    num_cols = df_filtered.select_dtypes(include="number").columns
+    for col in num_cols:
+        df_filtered[col] = df_filtered[col].fillna(0)
+
+    # Preprocessing dataframe - 0 valued columns
+    zero_share = (df_filtered[num_cols] == 0).sum() / len(df_filtered)  
+    zero_cols_to_drop = zero_share[zero_share >= 0.80].index.tolist()
+    df_filtered.drop(columns=zero_cols_to_drop, inplace=True)
+    print(f"Dropped {len(zero_cols_to_drop)} columns: {zero_cols_to_drop}")
+
+    # Preprocessing dataframe - datatypes and awkward column names
+    df_filtered["Calendar_Week"] = df_filtered["Calendar_Week"].astype(str)
+    df_filtered = df_filtered.loc[:, ~df_filtered.columns.str.startswith("+ per505")]
 
     return df_filtered
 
