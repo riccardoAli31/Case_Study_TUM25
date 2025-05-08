@@ -57,3 +57,29 @@ def get_party_positions_data(file_dir, file_name, config_path, country) -> pd.Da
 
     return df_filtered
 
+
+def get_gesis_data(path: str) -> pd.DataFrame:
+    """Load the gesis dataset, which represents voter positions, into a dataframe
+
+    Parameters
+    ----------
+    path : str
+        path to the file
+
+    Returns
+    -------
+    pd.DataFrame
+        dataset loaded into a dataframe
+
+    Raises
+    ------
+    FileNotFoundError
+        file at *path* not found
+    """
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"file not found at: {path}")
+
+    df = pd.read_spss(path=path, convert_categoricals=False)
+
+    return df
+
