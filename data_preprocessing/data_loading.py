@@ -58,18 +58,22 @@ def get_party_positions_data(file_dir, file_name, country) -> pd.DataFrame:
     return df_filtered
 
 
-def get_gesis_data(path: str) -> pd.DataFrame:
-    """Load the gesis dataset, which represents voter positions, into a dataframe
+def get_gesis_data(path: str, names: dict={}, cutoff: int = -70) -> tuple[pd.DataFrame, pd.Series]:
+    """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
 
     Parameters
     ----------
     path : str
         path to the file
+    cutoff : int, optional
+        all items with value below this are replaced with NaN, by default -70
 
     Returns
     -------
     pd.DataFrame
         dataset loaded into a dataframe
+    pd.Series
+        how often each unique answer was given
 
     Raises
     ------
@@ -81,5 +85,28 @@ def get_gesis_data(path: str) -> pd.DataFrame:
 
     df = pd.read_spss(path=path, convert_categoricals=False)
 
-    return df
+    # drop all unfinished surveys
+    df = df.drop(df[df["kp27_dispcode"] == 22].index).reset_index(drop=True)
+
+    # drop all unneeded columns
+    cols_to_drop = ["study", "version", "doi", "field_start", "field_end", "sample", "lfdn", "kp27_dispcode", 
+                    "kp27_intstatus", "kp27_modus", "kp27_device", "kp27_smartphone",
+                    "kp27_tablet", "kp27_speederindex", "kp27_lastpage", "kp27_datetime", "kp27_date_of_last_access",
+                    "kp27_850a", "kp27_850b", "kp27_870a", "kp27_870b", "kp27_4380", "kp27_4390aa", "kp27_4390ab", 
+                    "kp27_4390ba", "kp27_4390bb", "kp27_4480", "kp27_4380", "kp27_4490aa", "kp27_4490ab", 
+                    "kp27_4490ba", "kp27_4490bb", "kp27_4580", "kp27_4590aa", "kp27_4590ab", 
+                    "kp27_4590ba", "kp27_4590bb"]
+    
+    df = df.drop(columns=cols_to_drop).reset_index(drop=True)
+
+    # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
+    df = df[df >= cutoff]
+
+    # rename columns
+    df.rename(names, inplace=True, axis=1)
+
+    # how often each answer was given
+    count = df.value_counts()
+
+    return df, count
 
