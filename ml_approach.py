@@ -45,7 +45,7 @@ def preprocess_gesis(df: pd.DataFrame, columns: list=[], names: dict={}, cutoff:
     return df, count
 
 
-def plot_scatter(count: pd.Series, normalize: bool=False) -> None:
+def plot_scatter(count: pd.Series, normalize: bool=False, labels: list=[]) -> None:
     """plots 3d scatter of 2d policie space and how often each answer was given
 
     Parameters
@@ -54,6 +54,8 @@ def plot_scatter(count: pd.Series, normalize: bool=False) -> None:
         how often each unique answer was given
     normalize : bool, optional
         if values should be normalized to [0, 1], by default False
+    labels: list, optional
+        [xlabel, ylabel]
     """
     x_min, x_max = count.index.levels[0].min(), count.index.levels[0].max()
     y_min, y_max = count.index.levels[1].min(), count.index.levels[1].max()
@@ -67,8 +69,12 @@ def plot_scatter(count: pd.Series, normalize: bool=False) -> None:
     if normalize:
         Z = Z / Z.sum()
 
-    ax = plt.figure().add_subplot(projection="3d")
+    ax = plt.figure().add_subplot()
     ax.scatter(X, Y, Z)
+
+    if labels:
+        ax.set_xlabel(labels[0])
+        ax.set_ylabel(labels[1])
 
     plt.show()
 
