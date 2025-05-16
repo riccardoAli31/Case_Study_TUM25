@@ -58,7 +58,19 @@ def get_party_positions_data(file_dir, file_name, country) -> pd.DataFrame:
     return df_filtered
 
 
-def get_gesis_data(path: str, names: dict={}, cutoff: int = -70) -> tuple[pd.DataFrame, pd.Series]:
+def load_gesis_mapping(fp: str) -> dict:
+    """Load the mapping for column names of gesis data
+    """
+    with open(fp, "r") as f:
+        cfg = json.load(f)
+
+    try:
+        return cfg["voter_positions_mapping"]
+    except KeyError:
+        raise KeyError(f"'voter_positions_mapping' not found in {fp}")
+
+
+def get_gesis_data(path: str, cutoff: int = -70) -> tuple[pd.DataFrame, pd.Series]:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
 
     Parameters
@@ -67,6 +79,7 @@ def get_gesis_data(path: str, names: dict={}, cutoff: int = -70) -> tuple[pd.Dat
         path to the file
     cutoff : int, optional
         all items with value below this are replaced with NaN, by default -70
+        no answer is often encoded with -71
 
     Returns
     -------
@@ -103,7 +116,8 @@ def get_gesis_data(path: str, names: dict={}, cutoff: int = -70) -> tuple[pd.Dat
     df = df[df >= cutoff]
 
     # rename columns
-    df.rename(names, inplace=True, axis=1)
+    mapping = load_gesis_mapping("./data_preprocessing/configs.json")
+    df.rename(mapping, inplace=True, axis=1)
 
     # how often each answer was given
     count = df.value_counts()
