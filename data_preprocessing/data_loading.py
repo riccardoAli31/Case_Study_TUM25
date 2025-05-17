@@ -4,6 +4,17 @@ import pandas as pd
 CONFIG_PATH = "data_preprocessing/configs.json"
 
 
+def load_common_variables_mapping(path: str) -> dict:
+    """Load the mapping for common variables between the two datasets
+    """
+    with open(path, "r") as f:
+        cfg = json.load(f)
+    try:
+        return cfg["common_items"]
+    except KeyError:
+        raise KeyError(f"'common_items_mapping' not found in {path}")
+    
+
 def load_party_manifesto_mapping(config_path: str) -> dict:
     """
     Pull the `manifesto_mapping` dict from the JSON config.
@@ -16,7 +27,7 @@ def load_party_manifesto_mapping(config_path: str) -> dict:
     return mapping
 
 
-def get_party_positions_data(file_dir, file_name, country) -> pd.DataFrame:
+def get_party_positions_data(file_dir, country, file_name='party_dataset.csv') -> pd.DataFrame:
     """
     Load the party positions dataset and return rows that match a given country
     """
@@ -55,6 +66,11 @@ def get_party_positions_data(file_dir, file_name, country) -> pd.DataFrame:
     df_filtered["Calendar_Week"] = df_filtered["Calendar_Week"].astype(str)
     df_filtered = df_filtered.loc[:, ~df_filtered.columns.str.startswith("+ per505")]
 
+    common_items_mapping = load_common_variables_mapping(CONFIG_PATH)
+    base_columns = ["Country", "Date", "Calendar_Week", "Party_Name"]
+    policy_columns = list(common_items_mapping.keys())
+    df_filtered = df_filtered[base_columns + policy_columns]
+
     return df_filtered
 
 
@@ -70,7 +86,7 @@ def load_gesis_mapping(fp: str) -> dict:
         raise KeyError(f"'voter_positions_mapping' not found in {fp}")
 
 
-def get_gesis_data(path: str, cutoff: int = -70) -> tuple[pd.DataFrame, pd.Series]:
+def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset.sav') -> tuple[pd.DataFrame, pd.Series]:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
 
     Parameters
@@ -93,10 +109,12 @@ def get_gesis_data(path: str, cutoff: int = -70) -> tuple[pd.DataFrame, pd.Serie
     FileNotFoundError
         file at *path* not found
     """
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"file not found at: {path}")
+    sav_path = os.path.join(path, file_name)
 
-    df = pd.read_spss(path=path, convert_categoricals=False)
+    if not os.path.isfile(sav_path):
+        raise FileNotFoundError(f"CSV file not found at: {sav_path}")
+
+    df = pd.read_spss(path=sav_path, convert_categoricals=False)
 
     # drop all unfinished surveys
     df = df.drop(df[df["kp27_dispcode"] == 22].index).reset_index(drop=True)
@@ -114,10 +132,16 @@ def get_gesis_data(path: str, cutoff: int = -70) -> tuple[pd.DataFrame, pd.Serie
 
     # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
     df = df[df >= cutoff]
+    df = df.fillna(0)
 
     # rename columns
-    mapping = load_gesis_mapping("./data_preprocessing/configs.json")
+    mapping = load_gesis_mapping(CONFIG_PATH)
     df.rename(mapping, inplace=True, axis=1)
+
+    common_items_mapping = load_common_variables_mapping(CONFIG_PATH)
+    policy_columns = set(col for cols in common_items_mapping.values() for col in cols)
+    columns_to_keep = ["bundesland"] + list(policy_columns)
+    df = df[columns_to_keep]
 
     # how often each answer was given
     count = df.value_counts()
