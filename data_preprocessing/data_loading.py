@@ -1,6 +1,8 @@
 import os
 import json
 import pandas as pd 
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
 CONFIG_PATH = "data_preprocessing/configs.json"
 
 
@@ -148,3 +150,73 @@ def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset.sav') 
 
     return df, count
 
+
+def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folder', country: str = 'Germany', mapping_path: str = CONFIG_PATH) -> (pd.DataFrame, pd.DataFrame):
+    
+    """
+    Load party positions and voter survey data, aggregate and scale both
+    onto the same [0,10] range for two chosen policy dimensions.
+
+    Parameters
+    ----------
+    x_var : str
+        Name of the first policy dimension (e.g. "Planned Economy").
+    y_var : str
+        Name of the second policy dimension (e.g. "Environmental Protection").
+    file_dir : str
+        Path to folder containing the party CSV and GESIS data.
+    country : str, default 'Germany'
+        Country filter for party positions.
+    mapping_path : str, default dl.CONFIG_PATH
+        Path to the common-variables mapping JSON.
+
+    Returns
+    -------
+    party_df_scaled : pd.DataFrame
+    voter_df_scaled : pd.DataFrame
+    """
+
+    # --- Load and filter party data ---
+    party_df = get_party_positions_data(file_dir=file_dir, country=country)
+    party_week_filtered = party_df[party_df['Calendar_Week'] == party_df['Calendar_Week'].max()].reset_index(drop=True)
+    
+    # --- Load voter data ---
+    voter_list = get_gesis_data(path=file_dir)
+    voter_df = voter_list[0].copy()
+
+    # --- Load common variables ---
+    mapping = load_common_variables_mapping(path=mapping_path)
+
+    # Create aggregated features for the voters'data 
+    # Since for one variable of the party's data, we have a few corresponding ones from the voters'data, we'll have to aggregate the voter's feature into one
+    # ---> Weighted Average of the variables for each policy dimension
+    weights = np.array([0.5, 0.3, 0.2])
+    def feature_aggregation(row, features):
+        vals = row[features].values
+        sorted_vals = np.sort(vals)[::-1]
+        return np.dot(sorted_vals, weights)
+    # --- Aggregate voter features for each dimension ---
+    for dim in (x_var, y_var):
+        vars_to_agg = mapping[dim]
+        voter_df[dim] = voter_df.apply(lambda r: feature_aggregation(r, vars_to_agg), axis=1)
+    voter_agg = voter_df[[x_var, y_var]].copy()
+
+    # The party data for the chosen variables are in the range [0, 10] for both dimensions
+    # Scale the voters data to be in the same range as the parties
+    # Fit the scaler on voters data alone 
+    scaler = MinMaxScaler(feature_range=(0, 10))
+    # Transform voters and parties separately
+    scaled_voters = scaler.fit_transform(voter_agg[[x_var, y_var]])
+    scaled_parties = scaler.fit_transform(party_week_filtered[[x_var, y_var]])
+    # Assign scaled values back
+    voter_df_scaled = voter_agg.copy()
+    voter_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = scaled_voters
+    party_df_scaled = party_week_filtered.copy()
+    party_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = scaled_parties
+
+    party_df_scaled = party_df_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', x_var, y_var, f"{x_var} Scaled", f"{y_var} Scaled"]]
+    
+    voter_df_scaled["Label"] = "Voter"
+    party_df_scaled["Label"] = party_df_scaled["Party_Name"]
+
+    return party_df_scaled, voter_df_scaled
