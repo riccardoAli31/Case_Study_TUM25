@@ -151,7 +151,7 @@ def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset.sav') 
     return df, count
 
 
-def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folder', country: str = 'Germany', mapping_path: str = CONFIG_PATH) -> (pd.DataFrame, pd.DataFrame):
+def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folder', country: str = 'Germany', mapping_path: str = CONFIG_PATH) -> tuple[pd.DataFrame, pd.DataFrame]:
     
     """
     Load party positions and voter survey data, aggregate and scale both
