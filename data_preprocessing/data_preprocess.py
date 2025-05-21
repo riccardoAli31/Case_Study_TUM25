@@ -60,12 +60,11 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     scaler = MinMaxScaler(feature_range=(0, 10))
     # Transform voters and parties separately
     scaled_voters = scaler.fit_transform(voter_agg[[x_var, y_var]])
-    scaled_parties = scaler.fit_transform(party_week_filtered[[x_var, y_var]])
     # Assign scaled values back
     voter_df_scaled = voter_agg.copy()
     voter_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = scaled_voters
     party_df_scaled = party_week_filtered.copy()
-    party_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = scaled_parties
+    party_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = party_week_filtered[[x_var, y_var]].values
 
     party_df_scaled = party_df_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', x_var, y_var, f"{x_var} Scaled", f"{y_var} Scaled"]]
     voter_df_scaled["Label"] = "Voter"
