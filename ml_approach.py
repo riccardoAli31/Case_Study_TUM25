@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
 import data_preprocessing.data_preprocess as dp
 
 
@@ -36,7 +34,8 @@ def fit_multinomial_logit(voter_pca: pd.DataFrame, party_pca: pd.DataFrame, pc_c
         penalty=None,
         solver='lbfgs',
         multi_class='multinomial',
-        fit_intercept=True
+        fit_intercept=True,
+        max_iter=1000
     )
     clf.fit(X_long, y_long)
 
@@ -59,65 +58,73 @@ def fit_multinomial_logit(voter_pca: pd.DataFrame, party_pca: pd.DataFrame, pc_c
 lambda_values, lambda_df, beta = fit_multinomial_logit(voter_pca=voter_pca, party_pca=party_pca)
 
 
-# # 6) build the vote‐share function V_j(z):
-# def V_of_z(Z_new):
-#     """
-#     Z_new: p×2 array of any hypothetical party locations in PC-space.
-#     returns: length‐p array of predicted vote shares.
-#     """
-#     d2 = ((Y[:,None,:] - Z_new[None,:,:])**2).sum(axis=2)  # (n,p)
-#     U  = lambda_hat[None,:] - beta_hat * d2               # (n,p)
-#     P  = np.exp(U)
-#     P /= P.sum(axis=1)[:,None]
-#     return P.mean(axis=0)                                 # average over voters
+def vote_share_function(Z_new):
+    """
+    Z_new: either a numpy array (p×2) or a DataFrame with ['PC1','PC2'] columns
+    returns: length-p array of vote shares
+    """
+    # if they passed a DataFrame, grab its PC columns
+    if hasattr(Z_new, 'loc'):
+        Z_mat = Z_new[['PC1','PC2']].to_numpy()
+    else:
+        Z_mat = np.asarray(Z_new)
 
-# # 7) check that at the fitted party locations you recover your sample shares
-# Z_obs = Z  # the PC1/PC2 from party_pca
-# fitted_shares = V_of_z(Z_obs)
-# print("Fitted vote shares:", fitted_shares)
-
-
-
-
-# def do_regression(count: pd.Series, deg: int = 1, normalize: bool=False) -> LinearRegression:
-#     """simple polynomial regression of degree *deg*
-
-#     Parameters
-#     ----------
-#     count : pd.Series
-#         how often each unique answer was given
-#     deg : int, optional
-#         degree of the polynomial, by default 1
-#     normalize : bool, optional
-#         if values should be normalized to [0,1] before fitting the model, by default False
-
-#     Returns
-#     -------
-#     LinearRegression
-#         fitted model
-#     """
-#     poly = PolynomialFeatures(degree=deg)
-
-#     x_min, x_max = count.index.levels[0].min(), count.index.levels[0].max()
-#     y_min, y_max = count.index.levels[1].min(), count.index.levels[1].max()
-
-#     X = np.arange(x_min, x_max+1)
-#     Y = np.arange(y_min, y_max+1)
-#     X, Y = np.meshgrid(X, Y)
-#     X, Y = X.flatten(), Y.flatten()
-
-#     Z = count.unstack().values.T.flatten()
-#     if normalize:
-#         Z = Z / Z.sum()
-
-#     input_pts = np.stack([X, Y]).T
-#     in_features = poly.fit_transform(input_pts)
-
-#     model = LinearRegression(fit_intercept=False)
-#     model.fit(in_features, Z)
-
-#     return model
+    Y_coords = voter_pca[['PC1','PC2']].to_numpy()
+    # now do the usual squared‐distance trick
+    d2 = ((Y_coords[:,None,:] - Z_mat[None,:,:])**2).sum(axis=2)  # (n,p)
+    U  = lambda_values[None,:] - beta * d2                       # (n,p)
+    P  = np.exp(U)
+    P /= P.sum(axis=1)[:,None]
+    return P.mean(axis=0)
 
 
-# def plot(model):
-#     pass
+# 1) check electoral mean
+mean_coords = voter_pca[['PC1','PC2']].mean().values
+print("Electoral mean (PC1, PC2):", mean_coords)
+
+# 2) numeric gradient of vote shares at Z=0
+p = party_pca.shape[0]
+eps = 1e-6
+Z0 = np.zeros((p,2))
+grad = np.zeros((p,2))
+for j in range(p):
+    for d in (0,1):
+        Zp = Z0.copy(); Zp[j,d] += eps
+        Zm = Z0.copy(); Zm[j,d] -= eps
+        Pp = vote_share_function(Zp)
+        Pm = vote_share_function(Zm)
+        grad[j,d] = (Pp[j] - Pm[j])/(2*eps)
+
+print("Numerical ∂V_j/∂z_j at Z0 (j×d):\n", grad)
+# for an equilibrium we want all entries ≈ 0
+
+# 3) build the electoral covariance matrix ∇* = (1/n) YᵀY
+Y = voter_pca[['PC1','PC2']].to_numpy()
+n = Y.shape[0]
+Sigma = (Y.T @ Y) / n
+print("∇* =\n", Sigma)
+
+# find the lowest‐valence party
+lambda_df = lambda_df.copy().reset_index(drop=True)
+j_low = lambda_df['Valence'].idxmin()
+λ = lambda_values
+λ_low = λ[j_low]
+
+# compute ρ_low = [1 + Σ_{k≠low} exp(λ_k - λ_low)]^{-1}
+rho_low = 1.0 / (1.0 + sum(np.exp(λ[k] - λ_low) for k in range(p) if k != j_low))
+A_low   = beta * (1 - 2*rho_low)
+
+# characteristic matrix and its eigenvalues
+C_low = 2*A_low * Sigma - np.eye(2)
+eigs  = np.linalg.eigvals(C_low)
+print("Eigenvalues of C_low:", eigs)
+
+# convergence coefficient c = 2β(1-2ρ_low) ν²   where ν² = trace(Σ)
+nu2 = np.trace(Sigma)
+c   = 2*beta*(1-2*rho_low)*nu2
+print("Convergence coefficient c:", c)
+
+# --- checks ---
+# • if all(eigs < 0) then the Hessian at z=0 is negative‐definite → LSNE second‐order cond
+# • in 2D, a sufficient cond is c < 1; a necessary cond is c ≤ 2
+
