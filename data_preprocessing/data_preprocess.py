@@ -43,7 +43,7 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     # Create aggregated features for the voters'data 
     # Since for one variable of the party's data, we have a few corresponding ones from the voters'data, we'll have to aggregate the voter's feature into one
     # ---> Weighted Average of the variables for each policy dimension
-    weights = np.array([0.5, 0.3, 0.2])
+    weights = np.array([1/3, 1/3, 1/3])
     def feature_aggregation(row, features):
         vals = row[features].values
         sorted_vals = np.sort(vals)[::-1]
@@ -54,17 +54,20 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
         voter_df[dim] = voter_df.apply(lambda r: feature_aggregation(r, vars_to_agg), axis=1)
     voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote(a)']].copy()
 
-    # The party data for the chosen variables are in the range [0, 10] for both dimensions
-    # Scale the voters data to be in the same range as the parties
-    # Fit the scaler on voters data alone 
-    scaler = MinMaxScaler(feature_range=(0, 10))
-    # Transform voters and parties separately
-    scaled_voters = scaler.fit_transform(voter_agg[[x_var, y_var]])
-    # Assign scaled values back
+    # --- Standardize both clouds together ---
+    V = voter_agg[[x_var, y_var]]
+    P = party_week_filtered[[x_var, y_var]]
+
+    scaler = MinMaxScaler()
+    scaler.fit(pd.concat([V, P], ignore_index=True))
+
+    v_scaled = scaler.transform(V)
+    p_scaled = scaler.transform(P)
+
     voter_df_scaled = voter_agg.copy()
-    voter_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = scaled_voters
     party_df_scaled = party_week_filtered.copy()
-    party_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = party_week_filtered[[x_var, y_var]].values
+    voter_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = v_scaled
+    party_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = p_scaled
 
     party_df_scaled = party_df_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', x_var, y_var, f"{x_var} Scaled", f"{y_var} Scaled"]]
     voter_df_scaled["Label"] = "Voter"
