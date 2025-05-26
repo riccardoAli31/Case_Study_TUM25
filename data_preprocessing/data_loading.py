@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 CONFIG_PATH = "data_preprocessing/configs.json"
-VOTER_DATA_FILE_NAME = "voter_dataset_2024.sav"
+VOTER_DATA_FILE_NAME = "voter_dataset_2021.sav"
 
 
 def load_common_variables_mapping(path: str) -> dict:
@@ -77,16 +77,18 @@ def get_party_positions_data(file_dir, country, file_name='party_dataset.csv') -
     return df_filtered
 
 
-def load_gesis_mapping(fp: str) -> dict:
+def load_gesis_mapping(fp: str, file_name: str=VOTER_DATA_FILE_NAME) -> dict:
     """Load the mapping for column names of gesis data
     """
     with open(fp, "r") as f:
         cfg = json.load(f)
 
+    year = VOTER_DATA_FILE_NAME[-8:-4]
+
     try:
-        return cfg["voter_positions_mapping"]
+        return cfg[f"voter_positions_{year}_mapping"]
     except KeyError:
-        raise KeyError(f"'voter_positions_mapping' not found in {fp}")
+        raise KeyError(f"'voter_positions_{year}_mapping' not found in {fp}")
 
 
 def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name=VOTER_DATA_FILE_NAME) -> tuple[pd.DataFrame, pd.Series]:
@@ -122,26 +124,31 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name=VOTER_DAT
     df = pd.read_spss(path=sav_path, convert_categoricals=False)
 
     # drop all unfinished surveys
-    df = df.drop(df[df["kp27_dispcode"] == 22].index).reset_index(drop=True)
+    finished_survey_col = [col for col in list(df.columns) if col.endswith("dispcode")][0]
+    df = df.drop(df[df[finished_survey_col] == 22].index).reset_index(drop=True)
 
     # drop all unneeded columns
-    cols_to_drop = ["study", "version", "doi", "field_start", "field_end", "sample", "lfdn", "kp27_dispcode", 
-                    "kp27_intstatus", "kp27_modus", "kp27_device", "kp27_smartphone",
-                    "kp27_tablet", "kp27_speederindex", "kp27_lastpage", "kp27_datetime", "kp27_date_of_last_access",
-                    "kp27_850a", "kp27_850b", "kp27_870a", "kp27_870b", "kp27_4380", "kp27_4390aa", "kp27_4390ab", 
-                    "kp27_4390ba", "kp27_4390bb", "kp27_4480", "kp27_4380", "kp27_4490aa", "kp27_4490ab", 
-                    "kp27_4490ba", "kp27_4490bb", "kp27_4580", "kp27_4590aa", "kp27_4590ab", 
-                    "kp27_4590ba", "kp27_4590bb"]
+    # cols_to_drop = ["study", "version", "doi", "field_start", "field_end", "sample", "lfdn", "kp27_dispcode", 
+    #                 "kp27_intstatus", "kp27_modus", "kp27_device", "kp27_smartphone",
+    #                 "kp27_tablet", "kp27_speederindex", "kp27_lastpage", "kp27_datetime", "kp27_date_of_last_access",
+    #                 "kp27_850a", "kp27_850b", "kp27_870a", "kp27_870b", "kp27_4380", "kp27_4390aa", "kp27_4390ab", 
+    #                 "kp27_4390ba", "kp27_4390bb", "kp27_4480", "kp27_4380", "kp27_4490aa", "kp27_4490ab", 
+    #                 "kp27_4490ba", "kp27_4490bb", "kp27_4580", "kp27_4590aa", "kp27_4590ab", 
+    #                 "kp27_4590ba", "kp27_4590bb"]
     
-    df = df.drop(columns=cols_to_drop).reset_index(drop=True)
+    # df = df.drop(columns=cols_to_drop).reset_index(drop=True)
+
+    # rename columns
+    mapping = load_gesis_mapping(CONFIG_PATH, file_name)
+    df.rename(mapping, inplace=True, axis=1)
+
+    # drop all unneeded columns
+    cols = list(mapping.values())
+    df.drop(df.columns.difference(cols), axis=1, inplace=True)
 
     # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
     df = df[df >= cutoff]
     df = df.fillna(0)
-
-    # rename columns
-    mapping = load_gesis_mapping(CONFIG_PATH)
-    df.rename(mapping, inplace=True, axis=1)
 
     # how often each answer was given
     count = df.value_counts()
