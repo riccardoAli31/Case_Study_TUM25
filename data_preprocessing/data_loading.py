@@ -88,7 +88,7 @@ def load_gesis_mapping(fp: str) -> dict:
         raise KeyError(f"'voter_positions_mapping' not found in {fp}")
 
 
-def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset.sav') -> tuple[pd.DataFrame, pd.Series]:
+def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset_2024.sav') -> tuple[pd.DataFrame, pd.Series]:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
 
     Parameters
@@ -98,6 +98,8 @@ def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset.sav') 
     cutoff : int, optional
         all items with value below this are replaced with NaN, by default -70
         no answer is often encoded with -71
+    file_name : str, optional
+        name of the file at *path*
 
     Returns
     -------
