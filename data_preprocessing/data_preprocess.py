@@ -63,11 +63,16 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     V = voter_agg[[x_var, y_var]]
     P = party_week_filtered[[x_var, y_var]]
 
-    scaler = MinMaxScaler()
-    scaler.fit(pd.concat([V, P], ignore_index=True))
+    # Scale voter data independently
+    voter_scaler = MinMaxScaler(feature_range=(0, 10))
+    voter_scaler.fit(V)
+    v_scaled = voter_scaler.transform(V)
 
-    v_scaled = scaler.transform(V)
-    p_scaled = scaler.transform(P)
+    # Scale party data independently
+    party_scaler = MinMaxScaler(feature_range=(0, 10))
+    party_scaler.fit(P)
+    p_scaled = party_scaler.transform(P)
+
 
     voter_df_scaled = voter_agg.copy()
     party_df_scaled = party_week_filtered.copy()
