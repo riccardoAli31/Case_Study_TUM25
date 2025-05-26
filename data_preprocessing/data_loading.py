@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 CONFIG_PATH = "data_preprocessing/configs.json"
+VOTER_DATA_FILE_NAME = "voter_dataset_2024.sav"
 
 
 def load_common_variables_mapping(path: str) -> dict:
@@ -88,7 +89,7 @@ def load_gesis_mapping(fp: str) -> dict:
         raise KeyError(f"'voter_positions_mapping' not found in {fp}")
 
 
-def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset_2024.sav') -> tuple[pd.DataFrame, pd.Series]:
+def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name=VOTER_DATA_FILE_NAME) -> tuple[pd.DataFrame, pd.Series]:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
 
     Parameters
@@ -142,13 +143,47 @@ def get_gesis_data(path: str, cutoff: int = -70, file_name='voter_dataset_2024.s
     mapping = load_gesis_mapping(CONFIG_PATH)
     df.rename(mapping, inplace=True, axis=1)
 
-    common_items_mapping = load_common_variables_mapping(CONFIG_PATH)
-    policy_columns = set(col for cols in common_items_mapping.values() for col in cols)
-    columns_to_keep = ["bundesland", "who did you vote for:second vote(a)"] + list(policy_columns)
-    df = df[columns_to_keep]
-
     # how often each answer was given
     count = df.value_counts()
 
     return df, count
+
+
+def get_valence_from_gesis(politicians: dict) -> pd.DataFrame:
+    """Extract the valences of the parties given in *politicians* as df
+
+    Parameters
+    ----------
+    politicians : dict
+        has the form {name1: party1, name2: party2,...}, e.g. {"soeder": "CSU", "habeck": "GREENS"}
+
+    Returns
+    -------
+    pd.DataFrame
+        df with columns for name of politician, party of politician and the valence
+
+    Raises
+    ------
+    KeyError
+        if not all politicians were found in gesis data
+    """
+    df, _ = get_gesis_data()
+
+    politicians_names = tuple(politicians.keys())
+    # always of the form "opinion on:name", e.g. "opinion on:soeder"
+    cols = [col for col in df.columns if col.endswith(politicians_names)]
+    df = df[cols].copy()
+    df = df.aggregate("mean", axis=0).to_frame("valence")
+
+    df["politician"] = df.index
+    df["politician"] = df["politician"].apply(lambda s: s.split(":")[-1])
+    df["party"] = df["politician"].apply(lambda s: politicians[s])
+    df.index = np.arange(len(df))
+
+    if len(politicians) != len(df):
+        missing_politicians = [politician for politician in politicians if politician not in list(df["politician"])]
+        raise KeyError(f"The politicians {missing_politicians} were not found in survey.")
+
+    return df
+
 

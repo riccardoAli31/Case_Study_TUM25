@@ -34,8 +34,13 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     party_week_filtered = party_df[party_df['Calendar_Week'] == party_df['Calendar_Week'].max()].reset_index(drop=True)
     
     # --- Load voter data ---
-    voter_list = dl.get_gesis_data(path=file_dir)
-    voter_df = voter_list[0].copy()
+    voter_df, _ = dl.get_gesis_data(path=file_dir)
+    
+    # only keep common variables
+    common_items_mapping = dl.load_common_variables_mapping(CONFIG_PATH)
+    policy_columns = set(col for cols in common_items_mapping.values() for col in cols)
+    columns_to_keep = ["bundesland", "who did you vote for:second vote(a)"] + list(policy_columns)
+    voter_df = voter_df[columns_to_keep]
 
     # --- Load common variables ---
     mapping = dl.load_common_variables_mapping(path=mapping_path)
