@@ -77,7 +77,7 @@ def get_party_positions_data(file_dir, country, file_name='party_dataset.csv') -
     return df_filtered
 
 
-def load_gesis_mapping(fp: str, file_name: str=VOTER_DATA_FILE_NAME) -> dict:
+def load_gesis_mapping(fp: str) -> dict:
     """Load the mapping for column names of gesis data
     """
     with open(fp, "r") as f:
@@ -91,7 +91,7 @@ def load_gesis_mapping(fp: str, file_name: str=VOTER_DATA_FILE_NAME) -> dict:
         raise KeyError(f"'voter_positions_{year}_mapping' not found in {fp}")
 
 
-def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name=VOTER_DATA_FILE_NAME) -> tuple[pd.DataFrame, pd.Series]:
+def get_gesis_data(path: str="data_folder", cutoff: int=-70) -> tuple[pd.DataFrame, pd.Series]:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
 
     Parameters
@@ -116,7 +116,7 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name=VOTER_DAT
     FileNotFoundError
         file at *path* not found
     """
-    sav_path = os.path.join(path, file_name)
+    sav_path = os.path.join(path, VOTER_DATA_FILE_NAME)
 
     if not os.path.isfile(sav_path):
         raise FileNotFoundError(f"CSV file not found at: {sav_path}")
@@ -139,7 +139,7 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name=VOTER_DAT
     # df = df.drop(columns=cols_to_drop).reset_index(drop=True)
 
     # rename columns
-    mapping = load_gesis_mapping(CONFIG_PATH, file_name)
+    mapping = load_gesis_mapping(CONFIG_PATH)
     df.rename(mapping, inplace=True, axis=1)
 
     # drop all unneeded columns
@@ -147,7 +147,8 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name=VOTER_DAT
     df.drop(df.columns.difference(cols), axis=1, inplace=True)
 
     # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
-    df = df[df >= cutoff]
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    df[num_cols] = df[num_cols].mask(df[num_cols] < cutoff)
     df = df.fillna(0)
 
     # how often each answer was given
