@@ -3,10 +3,16 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
 
+x_var='Planned Economy'
+y_var='Environmental Protection'
 
-party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var='Planned Economy', y_var='Environmental Protection')
+party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
 
-party_pca, voter_pca = dp.center_rotate_data_cloud(party_scaled, voter_scaled, x_var='Planned Economy', y_var='Environmental Protection')
+party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f"{x_var}_voter_lin Scaled", f"{y_var}_voter_lin Scaled", "Label"]].rename(columns={
+    f'{x_var}_voter_lin Scaled': f'{x_var} Scaled',
+    f'{y_var}_voter_lin Scaled': f'{y_var} Scaled'})
+
+party_pca, voter_pca = dp.center_rotate_data_cloud(party_scaled_df, voter_scaled, x_var='Planned Economy', y_var='Environmental Protection')
 
 
 def fit_multinomial_logit(voter_pca: pd.DataFrame, party_pca: pd.DataFrame, pc_cols: tuple[str,str] = ('PC1','PC2')) -> tuple[np.ndarray, pd.DataFrame, float]:
@@ -34,8 +40,8 @@ def fit_multinomial_logit(voter_pca: pd.DataFrame, party_pca: pd.DataFrame, pc_c
         penalty=None,
         solver='lbfgs',
         multi_class='multinomial',
-        fit_intercept=True,
-        max_iter=1000
+        fit_intercept=True
+        # max_iter=1000
     )
     clf.fit(X_long, y_long)
 
