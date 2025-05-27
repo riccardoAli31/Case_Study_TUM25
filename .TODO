@@ -1,4 +1,12 @@
 TODO
 - pick features that are in both surveys
-- get party positions as mean of that partys voters
-- check model from paper 
+- get party positions as mean of partys voters --- Done_to be checked
+- What to do with external valences?
+- check model from paper -- how to proceed with equilibriums
+- Come up with a DS approach concept
+- How to merge the two approaches?
+
+FURTHER IMPROVEMENTS:
+- Check how it evolved for years in the past
+- Do the same for other countries
+- Introduce new variables 
