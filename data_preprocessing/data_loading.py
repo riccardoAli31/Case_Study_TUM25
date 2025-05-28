@@ -60,9 +60,9 @@ def get_party_positions_data(file_dir, country, file_name='party_dataset.csv') -
         df_filtered[col] = df_filtered[col].fillna(0)
 
     # Preprocessing dataframe - 0 valued columns
-    zero_share = (df_filtered[num_cols] == 0).sum() / len(df_filtered)  
-    zero_cols_to_drop = zero_share[zero_share >= 0.80].index.tolist()
-    df_filtered.drop(columns=zero_cols_to_drop, inplace=True)
+    # zero_share = (df_filtered[num_cols] == 0).sum() / len(df_filtered)  
+    # zero_cols_to_drop = zero_share[zero_share >= 0.80].index.tolist()
+    # df_filtered.drop(columns=zero_cols_to_drop, inplace=True)
 
     # Preprocessing dataframe - datatypes and awkward column names
     df_filtered["Calendar_Week"] = df_filtered["Calendar_Week"].astype(str)
@@ -100,8 +100,6 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name: str=VOTE
     cutoff : int, optional
         all items with value below this are replaced with NaN, by default -70
         no answer is often encoded with -71
-    file_name : str, optional
-        name of the file at *path*
 
     Returns
     -------
