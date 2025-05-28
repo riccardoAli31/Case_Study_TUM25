@@ -120,7 +120,7 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     voter_agg = voter_agg.dropna(subset=['Party_Name']).reset_index(drop=True)
 
     # --- build integer choice 0..p-1 in the same order as party_scaled ---
-    party_order = list(party_week_filtered['Party_Name'])
+    party_order = list(voter_agg['Party_Name'].unique())
     name2idx = {name:i for i,name in enumerate(party_order)}
     voter_agg['party_choice'] = voter_agg['Party_Name'].map(name2idx).astype(int)
 
@@ -179,39 +179,28 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     return party_df_scaled_final, voter_df_scaled
 
 
-def center_rotate_data_cloud(party_df: pd.DataFrame, voter_df: pd.DataFrame, x_var: str, y_var: str, pc1_name: str = "PC1", pc2_name: str = "PC2") -> tuple[pd.DataFrame, pd.DataFrame]:
+def center_data_and_compute_Vstar(party_df: pd.DataFrame, voter_df: pd.DataFrame, x_var: str, y_var: str) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
     """
-    Center both clouds by the MEAN of the voters (on the scaled x,y),
-    rotate into the voters' principal-axis frame, and store PC1/PC2
-    back into each DataFrame.
-
-    Returns only the two modified DataFrames.
+    1) Center both clouds by the voter‐mean on the scaled x,y.
+    2) Write those centered coords into xstar/ystar.
+    3) Compute V* = (1/n) * sum_i y_i y_i^T on the voter cloud.
     """
-    # pick off the scaled columns
+    # 1) extract & center
     cols = [f"{x_var} Scaled", f"{y_var} Scaled"]
-    Y = voter_df[cols].to_numpy()
-    Z = party_df[cols].to_numpy()
-
-    # 1) translate by voter mean
-    mean_v = Y.mean(axis=0)
+    Y = voter_df[cols].to_numpy()   # (n,2)
+    Z = party_df[cols].to_numpy()   # (p,2)
+    mean_v = Y.mean(axis=0)         # electoral mean in scaled units
     Yc = Y - mean_v
-    Zc = Z - mean_v
+    Zc = Z - mean_v                 # center the party cloud too
 
-    # 2) PCA on voter cloud
-    cov      = np.cov(Yc, rowvar=False)
-    eigv, eigvecs = np.linalg.eigh(cov)
-    order    = np.argsort(eigv)[::-1]
-    Q        = eigvecs[:,order]
+    # 2) build true V* = (1/n) ∑ y_i y_i^T
+    n = Yc.shape[0]
+    V_star = (Yc.T @ Yc) / n        # exactly Definition 2
 
-    # 3) rotate
-    Y_rot = Yc.dot(Q)
-    Z_rot = Zc.dot(Q)
-
-    # 4) write PCs back into copies of the DataFrames
+    # 3) write back centered coords into copies
     v2 = voter_df.copy()
     p2 = party_df.copy()
-    v2[pc1_name], v2[pc2_name] = Y_rot[:,0], Y_rot[:,1]
-    p2[pc1_name], p2[pc2_name] = Z_rot[:,0], Z_rot[:,1]
+    v2[f"{x_var} Centered"], v2[f"{y_var} Centered"] = Yc[:,0], Yc[:,1]
+    p2[f"{x_var} Centered"], p2[f"{y_var} Centered"] = Zc[:,0], Zc[:,1]
 
-    return p2, v2
-
+    return p2, v2, V_star
