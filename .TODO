@@ -2,10 +2,13 @@ TODO
 - pick features that are in both surveys --- Done_to be checked
 - get party positions as mean of partys voters --- Done_to be checked
     - does it make sense with the regression using voters mean and manifesto data?
+    - Problem with scaling, see e.g. Democracy Mean vs Democracy Mean Scaled
+      Min max scaling really the right tool?
 - check model from paper, how to proceed with equilibriums? 
 - What to do with external valences?
 - Come up with a DS approach concept
 - How to merge the two approaches?
+- Speed up and maybe break up get_scaled_party_voter_data to make it more clear
 
 FURTHER IMPROVEMENTS:
 - Check how it evolved for years in the past
