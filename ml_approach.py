@@ -8,15 +8,7 @@ from scipy.optimize import minimize
 from scipy.special import logsumexp
 
 x_var='Democracy'
-y_var='Political Corruption'
-
-party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
-
-party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f"{x_var}_voter_lin Scaled", f"{y_var}_voter_lin Scaled", "Label"]].rename(
-                                columns={f'{x_var}_voter_lin Scaled': f'{x_var} Scaled', f'{y_var}_voter_lin Scaled': f'{y_var} Scaled'})
-
-party_centered, voter_centered, V_star = dp.center_data_and_compute_Vstar(party_scaled_df, voter_scaled, x_var=x_var, y_var=y_var)
-
+y_var='Control of Economy: Negative'
 
 def fit_multinomial_mle(voter_pca, party_pca, pc_cols=(f"{x_var} Centered", f"{y_var} Centered"), choice_col='party_choice'):
     """
@@ -73,39 +65,50 @@ def fit_multinomial_mle(voter_pca, party_pca, pc_cols=(f"{x_var} Centered", f"{y
     return lam_hat, lambda_df, beta_hat
 
 
-lambda_values, lambda_df, beta = fit_multinomial_mle(voter_pca=voter_centered, party_pca=party_centered)
+if __name__ == "__main__":
 
 
-# 1) Identify the low‐valence party (party “1” in Schofield’s notation)
-j0 = np.argmin(lambda_values)
-party0 = party_centered['Party_Name'].iloc[j0]
 
-# 2) Build its A₁ and C₁
-expL = np.exp(lambda_values)
-rho  = expL / expL.sum()                # steady‐state shares ρ_j
-A    = beta * (1 - 2*rho)               # A_j = β(1–2ρ_j)
-A1   = A[j0]                            # this is A₁
+  party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
 
-# 3) Characteristic matrix C₁ = 2 A₁ V* – I
-I2   = np.eye(2)
-C1   = 2 * A1 * V_star - I2
+  party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f"{x_var}_voter_lin Scaled", f"{y_var}_voter_lin Scaled", "Label"]].rename(
+                                  columns={f'{x_var}_voter_lin Scaled': f'{x_var} Scaled', f'{y_var}_voter_lin Scaled': f'{y_var} Scaled'})
 
-# 4) Eigen‐decompose C₁
-eigvals_C1, eigvecs_C1 = eig(C1)
+  party_centered, voter_centered, V_star = dp.center_data_and_compute_Vstar(party_scaled_df, voter_scaled, x_var=x_var, y_var=y_var)
+    
+  lambda_values, lambda_df, beta = fit_multinomial_mle(voter_pca=voter_centered, party_pca=party_centered)
 
-print(f"Lowest‐valence party is {party0!r}")
-print("Eigenvalues of C₁:", np.round(eigvals_C1,3))
-print("Eigenvectors (as columns):\n", np.round(eigvecs_C1,3))
 
-# —–– 1) Necessary condition for joint origin LSNE —––
-nec = np.all(eigvals_C1 < 0)
-print("Necessary condition (all eig(C₁)<0):", nec)
+  # 1) Identify the low‐valence party (party “1” in Schofield’s notation)
+  j0 = np.argmin(lambda_values)
+  party0 = party_centered['Party_Name'].iloc[j0]
 
-# —–– 2) Sufficient condition (Corollary 2) —––
-# In 2D, ν² = trace(V*)
-nu2 = np.trace(V_star)
-c   = 2 * A1 * nu2
-print(f"Convergence coeff. c = 2·A₁·ν² = {c:.3f}")
+  # 2) Build its A₁ and C₁
+  expL = np.exp(lambda_values)
+  rho  = expL / expL.sum()                # steady‐state shares ρ_j
+  A    = beta * (1 - 2*rho)               # A_j = β(1–2ρ_j)
+  A1   = A[j0]                            # this is A₁
 
-suf = (c < 1)
-print("Sufficient condition (c<1):", suf)
+  # 3) Characteristic matrix C₁ = 2 A₁ V* – I
+  I2   = np.eye(2)
+  C1   = 2 * A1 * V_star - I2
+
+  # 4) Eigen‐decompose C₁
+  eigvals_C1, eigvecs_C1 = eig(C1)
+
+  print(f"Lowest‐valence party is {party0!r}")
+  print("Eigenvalues of C₁:", np.round(eigvals_C1,3))
+  print("Eigenvectors (as columns):\n", np.round(eigvecs_C1,3))
+
+  # —–– 1) Necessary condition for joint origin LSNE —––
+  nec = np.all(eigvals_C1 < 0)
+  print("Necessary condition (all eig(C₁)<0):", nec)
+
+  # —–– 2) Sufficient condition (Corollary 2) —––
+  # In 2D, ν² = trace(V*)
+  nu2 = np.trace(V_star)
+  c   = 2 * A1 * nu2
+  print(f"Convergence coeff. c = 2·A₁·ν² = {c:.3f}")
+
+  suf = (c < 1)
+  print("Sufficient condition (c<1):", suf)
