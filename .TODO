@@ -1,9 +1,8 @@
 TODO
-- voter data from 2021 not working
-- pick features that are in both surveys
+- pick features that are in both surveys --- Done_to be checked
 - get party positions as mean of partys voters --- Done_to be checked
+- check model from paper, how to proceed with equilibriums? 
 - What to do with external valences?
-- check model from paper -- how to proceed with equilibriums
 - Come up with a DS approach concept
 - How to merge the two approaches?
 

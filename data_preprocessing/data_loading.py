@@ -2,9 +2,8 @@ import os
 import json
 import pandas as pd 
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
 CONFIG_PATH = "data_preprocessing/configs.json"
-VOTER_DATA_FILE_NAME = "voter_dataset_2024.sav"
+VOTER_DATA_FILE_NAME = "voter_dataset_2021.sav"
 
 
 def load_common_variables_mapping(path: str) -> dict:
@@ -182,5 +181,4 @@ def get_valence_from_gesis(politicians: dict) -> pd.DataFrame:
         raise KeyError(f"The politicians {missing_politicians} were not found in survey.")
 
     return df
-
 

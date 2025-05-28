@@ -64,27 +64,45 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     # --- Load voter data ---
     voter_df, _ = dl.get_gesis_data(path=file_dir)
     
-    # only keep common variables
+    # # only keep common variables
     common_items_mapping = dl.load_common_variables_mapping(CONFIG_PATH)
-    policy_columns = set(col for cols in common_items_mapping.values() for col in cols)
-    columns_to_keep = ["bundesland", "who did you vote for:second vote(a)"] + list(policy_columns)
-    voter_df = voter_df[columns_to_keep]
+   
+    # --- Filter that mapping to what actually exists in this voter_df ---
+    filtered_mapping = {
+        dim: [col for col in cols if col in voter_df.columns]
+        for dim, cols in common_items_mapping.items()
+    }
 
-    # --- Load common variables ---
-    mapping = dl.load_common_variables_mapping(path=mapping_path)
+    # Make sure our two chosen policy dims survived the filter
+    for dim in (x_var, y_var):
+        if not filtered_mapping.get(dim):
+            raise KeyError(
+                f'None of the columns for policy‐dimension "{dim}" '
+                "were found in your voter data")
+    
+    # --- Subset voter_df to only the surviving common items (plus your fixed ones) ---
+    policy_columns = set().union(*filtered_mapping.values())
+    columns_to_keep = ["bundesland", "who did you vote for:second vote(a)"] \
+                      + sorted(policy_columns)
+    voter_df = voter_df.loc[:, voter_df.columns.intersection(columns_to_keep)]
 
     # Create aggregated features for the voters'data 
     # Since for one variable of the party's data, we have a few corresponding ones from the voters'data, we'll have to aggregate the voter's feature into one
-    # ---> Weighted Average of the variables for each policy dimension
-    weights = np.array([1/3, 1/3, 1/3])
+    # ---> Average of the variables for each policy dimension
     def feature_aggregation(row, features):
-        vals = row[features].values
+        vals = row[features].astype(float).values
+        if vals.size == 0:
+            return np.nan
         sorted_vals = np.sort(vals)[::-1]
+        # build an array of 1/n for however many items there are
+        weights = np.ones(sorted_vals.size) / sorted_vals.size
         return np.dot(sorted_vals, weights)
+
     # --- Aggregate voter features for each dimension ---
     for dim in (x_var, y_var):
-        vars_to_agg = mapping[dim]
-        voter_df[dim] = voter_df.apply(lambda r: feature_aggregation(r, vars_to_agg), axis=1)
+        vars_to_agg = filtered_mapping[dim]
+        voter_df[dim] = voter_df.apply(lambda row: feature_aggregation(row, vars_to_agg), axis=1)
+
     voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote(a)']].copy()
 
     # --- map voter codes → Party_Name (must match party_scaled['Party_Name']) ---
