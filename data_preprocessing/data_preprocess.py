@@ -1,6 +1,6 @@
 import pandas as pd 
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import data_preprocessing.data_loading as dl
 CONFIG_PATH = "data_preprocessing/configs.json"
 
@@ -105,12 +105,12 @@ def get_scaled_party_voter_data(x_var: str, y_var: str) -> tuple[pd.DataFrame, p
     party_pts = party_week_filtered[[x_var, y_var]].copy()
 
     # Scale voter data independently
-    voter_scaler = MinMaxScaler()
+    voter_scaler = StandardScaler()
     voter_scaler.fit(vot_pts)
     v_scaled = voter_scaler.transform(vot_pts)
 
     # Scale party data independently
-    party_scaler = MinMaxScaler()
+    party_scaler = StandardScaler()
     party_scaler.fit(party_pts)
     p_scaled = party_scaler.transform(party_pts)
 
