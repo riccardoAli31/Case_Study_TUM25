@@ -137,28 +137,29 @@ def get_scaled_party_voter_data(x_var: str, y_var: str) -> tuple[pd.DataFrame, p
     return party_df_scaled, voter_df_scaled
 
 
-def center_data_and_compute_Vstar(party_df: pd.DataFrame, voter_df: pd.DataFrame, x_var: str, y_var: str) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
-    """
-    1) Center both clouds by the voter‐mean on the scaled x,y.
-    2) Write those centered coords into xstar/ystar.
-    3) Compute V* = (1/n) * sum_i y_i y_i^T on the voter cloud.
-    """
-    # 1) extract & center
-    cols = [f"{x_var} Scaled", f"{y_var} Scaled"]
-    Y = voter_df[cols].to_numpy()   # (n,2)
-    Z = party_df[cols].to_numpy()   # (p,2)
-    mean_v = Y.mean(axis=0)         # electoral mean in scaled units
-    Yc = Y - mean_v
-    Zc = Z - mean_v                 # center the party cloud too
+def center_party_voter_data(voter_df, party_df, x_var, y_var):
+    # Build the exact column names
+    x_scaled_col = f"{x_var} Scaled"
+    y_scaled_col = f"{y_var} Scaled"
+    x_centered_col = f"{x_var} Centered"
+    y_centered_col = f"{y_var} Centered"
 
-    # 2) build true V* = (1/n) ∑ y_i y_i^T
-    n = Yc.shape[0]
-    V_star = (Yc.T @ Yc) / n        # exactly Definition 2
+    # Sanity check: make sure the scaled‐columns exist in both DataFrames
+    for col in (x_scaled_col, y_scaled_col):
+        if col not in voter_df.columns:
+            raise KeyError(f"Column '{col}' not found in voter_df.")
+        if col not in party_df.columns:
+            raise KeyError(f"Column '{col}' not found in party_df.")
 
-    # 3) write back centered coords into copies
-    v2 = voter_df.copy()
-    p2 = party_df.copy()
-    v2[f"{x_var} Centered"], v2[f"{y_var} Centered"] = Yc[:,0], Yc[:,1]
-    p2[f"{x_var} Centered"], p2[f"{y_var} Centered"] = Zc[:,0], Zc[:,1]
+    # 1) Compute the voter‐means for x_scaled_col and y_scaled_col
+    mean_series = voter_df[[x_scaled_col, y_scaled_col]].astype(float).mean()
 
-    return p2, v2, V_star
+    # 2) Subtract the voter‐means and store results in two new columns in voter_df
+    voter_df[x_centered_col] = voter_df[x_scaled_col].astype(float) - mean_series[x_scaled_col]
+    voter_df[y_centered_col] = voter_df[y_scaled_col].astype(float) - mean_series[y_scaled_col]
+
+    # 3) Subtract the same voter‐means in party_df
+    party_df[x_centered_col] = party_df[x_scaled_col].astype(float) - mean_series[x_scaled_col]
+    party_df[y_centered_col] = party_df[y_scaled_col].astype(float) - mean_series[y_scaled_col]
+
+    return party_df, voter_df
