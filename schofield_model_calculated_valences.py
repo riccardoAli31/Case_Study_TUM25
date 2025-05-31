@@ -10,60 +10,82 @@ y_var='Education Expansion'
 
 def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataFrame, 
                           pc_cols: tuple[str,str] = (f"{x_var} Centered", f"{y_var} Centered")) -> tuple[np.ndarray, pd.DataFrame, float]:
-    
-    # 1) Extract the 2D coordinates of voters (Y) and parties (Z)
-    Y = voter_centered[list(pc_cols)].to_numpy()   # shape = (n, 2)
-    Z = party_centered[list(pc_cols)].to_numpy()   # shape = (p, 2)
-    # n, p = Y.shape[0], Z.shape[0]
+    """
+    Fits a “simple” multinomial logit using sklearn on the (n × p) matrix D of negative squared distances:
+        D[i,j] = -|| x_i - z_j ||^2,
+    where x_i is voter i’s 2D coordinate and z_j is party j’s 2D coordinate.
 
-    # 2) Build the (n × p) matrix of negative squared distances:
-    #      D[i, j] = -|| Y[i,:] - Z[j,:] ||^2
-    dist2 = ((Y[:, None, :] - Z[None, :, :]) ** 2).sum(axis=2)  # (n, p) of ||y_i - z_j||^2
-    D = -dist2                                                  # (n, p) of -||y_i - z_j||^2
+    Returns:
+      - lambda_vals: length‐p array of intercepts (λ_j), ordered so lambda_vals[j] is party‐j’s intercept.
+      - lambda_df  : DataFrame with columns ["class_index","Party_Name","Valence"], sorted by descending Valence.
+      - beta_hat   : a single scalar, taken as the average of diag(coef_matrix).  (Warning printed if off‐diagonals are large.)
+    """
 
-    # 3) Extract the “true choice” of each voter (an integer in 0..p-1)
+    # 1) Extract voter and party coordinates as NumPy arrays
+    Y = voter_centered[list(pc_cols)].to_numpy(dtype=float)   # shape = (n, 2)
+    Z = party_centered[list(pc_cols)].to_numpy(dtype=float)   # shape = (p, 2)
+    n, p = Y.shape[0], Z.shape[0]
+
+    # 2) Build the distance matrix dist2[i,j] = ||Y[i] - Z[j]||^2, then D = -dist2
+    dist2 = ((Y[:, None, :] - Z[None, :, :])**2).sum(axis=2)  # shape = (n, p)
+    D = -dist2                                              # shape = (n, p)
+
+    # 3) Extract the integer “true choice” y_i ∈ {0,...,p-1} from voter_centered["party_choice"].
     if "party_choice" not in voter_centered.columns:
         raise KeyError("voter_centered must contain a column 'party_choice' with integer party indices 0..p-1.")
-    y_choices = voter_centered["party_choice"].to_numpy().astype(int)  # shape = (n,)
+    y_choices = voter_centered["party_choice"].to_numpy(dtype=int)
+    # Sanity check: the unique labels should be exactly {0,1,...,p-1}
+    unique_labels = np.unique(y_choices)
+    if set(unique_labels.tolist()) != set(range(p)):
+        raise ValueError(
+            f"Found labels = {unique_labels.tolist()}, but expected exactly [0..{p-1}]."
+        )
 
-    # 4) Fit a standard p‐class multinomial logit on (D, y_choices)
-    clf = LogisticRegression(
-        penalty=None,                       # no penalty so that intercepts + slopes are unrestricted
-        solver='lbfgs',                     # LBFGS handles multiclass natively
-        multi_class='multinomial',
-        fit_intercept=True)
+    # 4) Fit sklearn’s multinomial logit on (D, y_choices):
+    clf = LogisticRegression(penalty=None, solver='lbfgs', multi_class='multinomial', fit_intercept=True)
     clf.fit(D, y_choices)
 
-    # 5) Extract each party’s intercept λ_j
-    lambda_vals = clf.intercept_.copy()   # shape = (p,)
+    # 5) Extract intercepts and full coefficient matrix, then reorder them so row=j, col=k corresponds to “coef for D[:,k] when predicting class=j.”
+    raw_intercepts = clf.intercept_  # shape = (len(classes),)
+    raw_coefs      = clf.coef_       # shape = (len(classes), p)
+    classes        = clf.classes_.astype(int)  # e.g. [0,1,...,p-1]
 
-    # 6) Recover a single β by looking at the diagonal of clf.coef_.
-    #    _coef_ has shape (p, p): row j is the slope‐vector for class=j,
-    #    column k is the coefficient on D[:,k] (which is -||y - z_k||^2).
-    #
-    #    In a pure conditional logit U_{i, j} = λ_j + β * D[i, j],
-    #    the only nonzero coefficient in row j would be the j-th column (and that value would be β).
-    #    Off‐diagonals should be ≈ 0.  Thus, we estimate a single β as
-    #       β_hat ≈ − mean( diag( clf.coef_ ) ).
-    coef_matrix = clf.coef_            # shape = (p, p)
-    diag_coeffs = np.diag(coef_matrix) # length‐p: [ coef[j,j] for j in 0..p-1 ]
-    beta_val = -diag_coeffs.mean()     # take negative of average diagonal
+    # Build lambda_vals[j] = intercept for class=j
+    lambda_vals = np.zeros(p, dtype=float)
+    for idx, cls in enumerate(classes):
+        lambda_vals[cls] = raw_intercepts[idx]
 
-    # 7) Build a DataFrame for λ_j (Valence) + party names
-    #    We assume party_centered["Party_Name"] is aligned so that row-index j corresponds
-    #    to the j-th party.  If there's any re‐indexing, make sure to reset_index(drop=True).
+    # Build coef_matrix[j,k] = slope on D[:,k] when predicting class=j
+    coef_matrix = np.zeros((p, p), dtype=float)
+    for idx, cls in enumerate(classes):
+        coef_matrix[cls, :] = raw_coefs[idx, :]
+
+    # 6) Inspect diagonal vs off‐diagonal.  In a perfect conditional logit, coef_matrix is diagonal.
+    diag_coeffs = np.diag(coef_matrix)  # length-p
+    offdiag_max = np.max(np.abs(coef_matrix - np.diag(diag_coeffs)))
+    if offdiag_max > 1e-6:
+        print("WARNING: off‐diagonal coefficients are not ≈ 0.  Maximum abs(off-diag) =",
+              np.round(offdiag_max, 6))
+        print("Full coef_matrix:\n", np.round(coef_matrix, 4))
+
+    # 7) Our “single β” is just the average of the diagonal entries.
+    #    If the mean is negative, flip sign (since D = -||··||^2).
+    beta_hat = float(np.mean(diag_coeffs))
+    if beta_hat < 0:
+        beta_hat = float(-np.mean(diag_coeffs))
+        print("NOTE: Average diagonal was negative; setting β_hat = -mean(diag) =", beta_hat)
+
+    # 8) Build a DataFrame of (class_index, Party_Name, Valence=λ_j) sorted descending by Valence
     party_names = party_centered["Party_Name"].reset_index(drop=True)
-    classes = clf.classes_.astype(int)  # should be array([0,1,2,...,p-1])
-
+    if len(party_names) != p:
+        raise ValueError(f"party_centered has {len(party_names)} rows but expected p={p}.")
     lambda_df = pd.DataFrame({
-        "class_index": classes,
-        "Party_Name":   party_names.loc[classes].values,
+        "class_index": np.arange(p),
+        "Party_Name":   party_names.values,
         "Valence":      lambda_vals
-    })
-    # Sort by descending Valence so that highest‐valence party comes first
-    lambda_df = lambda_df.sort_values("Valence", ascending=False).reset_index(drop=True)
+    }).sort_values("Valence", ascending=False).reset_index(drop=True)
 
-    return lambda_vals, lambda_df, beta_val
+    return lambda_vals, lambda_df, beta_hat
 
 
 if __name__ == "__main__":
@@ -74,7 +96,7 @@ if __name__ == "__main__":
                                 columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
 
     party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
-    
+
     lambda_values, lambda_df, beta = fit_multinomial_logit(voter_centered=voter_centered, party_centered=party_centered)
 
     # 1) Identify the low‐valence party (party “1” in Schofield’s notation)

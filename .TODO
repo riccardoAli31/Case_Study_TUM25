@@ -1,7 +1,8 @@
 TODO
-- Calculate eigenvalues, eigenvectors, covariance on SCALED DATA --- recheck implementation of model_paper.ipynb
 - Fit the beta parameter using multinomial regression & use external valences
 - Simulate equilibrium positions for the model from paper
+
+- Check multinomial logistic regression implementation for the model with calculated valences 
 
 - Write down and formalize the DS model
 - Implement the DS model
