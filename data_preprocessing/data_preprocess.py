@@ -1,77 +1,25 @@
 import pandas as pd 
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.isotonic import IsotonicRegression
-from sklearn.linear_model import LinearRegression
 import data_preprocessing.data_loading as dl
 CONFIG_PATH = "data_preprocessing/configs.json"
 
 
-def party_positions_correction(df, x_col, x_mean_col, y_col, y_mean_col):
-    """
-    Returns a copy of df with two extra columns:
-      - f"{x_col}_voter_iso"
-      - f"{y_col}_voter_iso"
-
-    These are the isotonic‐regression fits of the voter‐means onto the
-    manifesto scores, ensuring the voter‐means are monotonic in the same
-    rank‐order as the scaled party data.
-    """
-    df_lin = df.copy()
-
-    # --- X-axis linear fit: predict voter means from manifesto scores ---
-    lr_x = LinearRegression()
-    # here X is the manifesto‐scaled party score, y is the voter mean
-    lr_x.fit(df_lin[[x_col]].values, df_lin[x_mean_col].values)
-    df_lin[f"{x_col}_voter_lin"] = lr_x.predict(
-        df_lin[[x_col]].values)
-    
-    # --- Y-axis linear fit ---
-    lr_y = LinearRegression()
-    lr_y.fit(df_lin[[y_col]].values, df_lin[y_mean_col].values)
-    df_lin[f"{y_col}_voter_lin"] = lr_y.predict(df_lin[[y_col]].values)
-    return df_lin
-
-
-def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folder', country: str = 'Germany', mapping_path: str = CONFIG_PATH) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Load party positions and voter survey data, aggregate and scale both
-    onto the same [0,10] range for two chosen policy dimensions.
-
-    Parameters
-    ----------
-    x_var : str
-        Name of the first policy dimension (e.g. "Planned Economy").
-    y_var : str
-        Name of the second policy dimension (e.g. "Environmental Protection").
-    file_dir : str
-        Path to folder containing the party CSV and GESIS data.
-    country : str, default 'Germany'
-        Country filter for party positions.
-    mapping_path : str, default dl.CONFIG_PATH
-        Path to the common-variables mapping JSON.
-
-    Returns
-    -------
-    party_df_scaled : pd.DataFrame
-    voter_df_scaled : pd.DataFrame
-    """
-
+def get_raw_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folder', country: str = 'Germany') -> tuple[pd.DataFrame, pd.DataFrame]:
     # --- Load and filter party data ---
     party_df = dl.get_party_positions_data(file_dir=file_dir, country=country)
     party_week_filtered = party_df[party_df['Calendar_Week'] == party_df['Calendar_Week'].max()].reset_index(drop=True)
-    
+
     # --- Load voter data ---
     voter_df, _ = dl.get_gesis_data(path=file_dir)
-    
+
     # # only keep common variables
     common_items_mapping = dl.load_common_variables_mapping(CONFIG_PATH)
-   
+
     # --- Filter that mapping to what actually exists in this voter_df ---
     filtered_mapping = {
         dim: [col for col in cols if col in voter_df.columns]
-        for dim, cols in common_items_mapping.items()
-    }
+        for dim, cols in common_items_mapping.items()}
 
     # Make sure our two chosen policy dims survived the filter
     for dim in (x_var, y_var):
@@ -79,11 +27,11 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
             raise KeyError(
                 f'None of the columns for policy‐dimension "{dim}" '
                 "were found in your voter data")
-    
+
     # --- Subset voter_df to only the surviving common items (plus your fixed ones) ---
     policy_columns = set().union(*filtered_mapping.values())
-    columns_to_keep = ["bundesland", "who did you vote for:second vote(a)"] \
-                      + sorted(policy_columns)
+    columns_to_keep = ["bundesland", "who did you vote for:second vote(a)", "do you incline towards a party, if so which one(a)", 
+                    "how strongly do you incline towards this party"] + sorted(policy_columns)
     voter_df = voter_df.loc[:, voter_df.columns.intersection(columns_to_keep)]
 
     # Create aggregated features for the voters'data 
@@ -103,7 +51,8 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
         vars_to_agg = filtered_mapping[dim]
         voter_df[dim] = voter_df.apply(lambda row: feature_aggregation(row, vars_to_agg), axis=1)
 
-    voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote(a)']].copy()
+    voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote(a)', 'do you incline towards a party, if so which one(a)', 
+                        'how strongly do you incline towards this party']].copy()
 
     # --- map voter codes → Party_Name (must match party_scaled['Party_Name']) ---
     code2party = {
@@ -124,17 +73,36 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     name2idx = {name:i for i,name in enumerate(party_order)}
     voter_agg['party_choice'] = voter_agg['Party_Name'].map(name2idx).astype(int)
 
-    # --- Compute voter means for party positions for each scaled dimension ---
-    party_means = (voter_agg.groupby('Party_Name')[[x_var, y_var]].mean().reset_index()
-                            .rename(columns={x_var: f'{x_var} Mean', y_var: f'{y_var} Mean'}))
-    mean_df = party_means[[f'{x_var} Mean', f'{y_var} Mean', 'Party_Name']].copy()
+    return party_week_filtered, voter_agg
+
+
+def party_position_weighted(df, x_var, y_var, weight_manifesto=0.2, weight_voters_mean=0.8):
+    # Build the expected column names for x_var
+    x_scaled_col = f"{x_var} Scaled"
+    x_mean_col   = f"{x_var} Voters_Mean"
+    x_comb_col   = f"{x_var} Combined"
+    # Build the expected column names for y_var
+    y_scaled_col = f"{y_var} Scaled"
+    y_mean_col   = f"{y_var} Voters_Mean"
+    y_comb_col   = f"{y_var} Combined"
+    # Check that the required columns exist
+    for col in (x_scaled_col, x_mean_col, y_scaled_col, y_mean_col):
+        if col not in df.columns:
+            raise KeyError(f"Required column '{col}' not found in DataFrame.")
+    # Compute the “combined” columns
+    df[x_comb_col] = weight_manifesto * df[x_scaled_col] + weight_voters_mean * df[x_mean_col]
+    df[y_comb_col] = weight_manifesto * df[y_scaled_col] + weight_voters_mean * df[y_mean_col]
+
+    return df
+
+
+def get_scaled_party_voter_data(x_var: str, y_var: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+
+    party_week_filtered, voter_agg = get_raw_party_voter_data(x_var=x_var, y_var=y_var)
 
     # --- Standardize all clouds ---
     vot_pts = voter_agg[[x_var, y_var]].copy()
-
     party_pts = party_week_filtered[[x_var, y_var]].copy()
-
-    mean_pts = mean_df[[f'{x_var} Mean', f'{y_var} Mean']].copy()
 
     # Scale voter data independently
     voter_scaler = MinMaxScaler()
@@ -146,37 +114,27 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_fo
     party_scaler.fit(party_pts)
     p_scaled = party_scaler.transform(party_pts)
 
-    # Scale mean party data independently
-    party_mean_scaler = MinMaxScaler()
-    party_mean_scaler.fit(mean_pts)
-    m_scaled = party_mean_scaler.transform(mean_pts)
-
     voter_df_scaled = voter_agg.copy()
     party_df_scaled = party_week_filtered.copy()
-    mean_pts_scaled = mean_df.copy()
     voter_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = v_scaled
     party_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = p_scaled
-    mean_pts_scaled[[f"{x_var} Mean Scaled", f"{y_var} Mean Scaled"]] = m_scaled
 
-    # Merge mean_scaled and party_scaled data
+    # --- Compute voter means for party positions for each scaled dimension ---
+    party_means = (voter_df_scaled.groupby('Party_Name')[[f"{x_var} Scaled", f"{y_var} Scaled"]].mean().reset_index()
+                            .rename(columns={f"{x_var} Scaled": f'{x_var} Voters_Mean', f"{y_var} Scaled": f'{y_var} Voters_Mean'}))
+    mean_df = party_means[[f'{x_var} Voters_Mean', f'{y_var} Voters_Mean', 'Party_Name']].copy()
+
+    # --- Merge scaled manifesto data with voters mean positions ---
     party_df_scaled = party_df_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', x_var, y_var, f"{x_var} Scaled", f"{y_var} Scaled"]]
-    party_df_scaled = party_df_scaled.merge(mean_pts_scaled, on='Party_Name')
+    party_df_scaled = party_df_scaled.merge(mean_df, on='Party_Name')
+
+    # --- Final party posiitons: 0.2*manifesto + 0.8*voters mean ---
+    party_df_scaled = party_position_weighted(df=party_df_scaled, x_var=x_var, y_var=y_var)
+
     party_df_scaled['Label'] = party_df_scaled['Party_Name']
-
-    #Linear regression of manifesto party data and voters means
-    party_df_scaled = party_positions_correction(party_df_scaled, f"{x_var}", f"{x_var} Mean", f"{y_var}", f"{y_var} Mean")
-
-    # Scale regressed party position
-    lin_pts = party_df_scaled[[f'{x_var}_voter_lin', f'{y_var}_voter_lin']].copy()
-    party_lin_scaler = MinMaxScaler()
-    party_lin_scaler.fit(lin_pts)
-    lin_scaled = party_lin_scaler.transform(lin_pts)
-    party_df_scaled_final = party_df_scaled.copy()
-    party_df_scaled_final[[f'{x_var}_voter_lin Scaled', f'{y_var}_voter_lin Scaled']] = lin_scaled
-
     voter_df_scaled['Label'] = 'Voter'
 
-    return party_df_scaled_final, voter_df_scaled
+    return voter_df_scaled, party_df_scaled
 
 
 def center_data_and_compute_Vstar(party_df: pd.DataFrame, voter_df: pd.DataFrame, x_var: str, y_var: str) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
