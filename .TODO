@@ -1,8 +1,5 @@
 TODO
-- get party positions as mean of partys voters --- DONE
-    - create mean of party voters [on scaled data]
-    - weighted sum of voters mean and manifesto data [on scaled data]
-- Break the get_scaled_party_voter_data function to make it more clear --- DONE
+- Calculate eigenvalues, eigenvectors, covariance on SCALED DATA --- recheck implementation of model_paper.ipynb
 - Fit the beta parameter using multinomial regression & use external valences
 - Simulate equilibrium positions for the model from paper
 
