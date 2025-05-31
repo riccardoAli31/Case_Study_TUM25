@@ -134,7 +134,7 @@ def get_scaled_party_voter_data(x_var: str, y_var: str) -> tuple[pd.DataFrame, p
     party_df_scaled['Label'] = party_df_scaled['Party_Name']
     voter_df_scaled['Label'] = 'Voter'
 
-    return voter_df_scaled, party_df_scaled
+    return party_df_scaled, voter_df_scaled
 
 
 def center_data_and_compute_Vstar(party_df: pd.DataFrame, voter_df: pd.DataFrame, x_var: str, y_var: str) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray]:
