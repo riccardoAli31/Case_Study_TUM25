@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
 from numpy.linalg import eig
+import plotly.express as px
 
 x_var='Democracy'
 y_var='Education Expansion'
@@ -67,6 +68,82 @@ def fit_multinomial_logit(voter_scaled: pd.DataFrame, party_scaled: pd.DataFrame
     return lambda_vals, lambda_df
 
 
+def plot_centered_with_arrow(voter_centered: pd.DataFrame, party_centered: pd.DataFrame, x_var: str, y_var: str,
+                             eigvals_C1: np.ndarray, eigvecs_C1: np.ndarray, j0: int, party0: str, arrow_length: float = 0.5) -> None:
+    """
+    Plots all centered voter+party points and, if there is a positive eigenvalue in C1,
+    draws an arrow from the lowest‐valence party's centered coordinate in the direction
+    of that eigenvector.
+    """
+
+    # 1) Concatenate the two DataFrames so we can plot them together:
+    concatenated_df = pd.concat([voter_centered, party_centered], ignore_index=True)
+
+    # 2) Build the scatter plot of all CENTERED points, colored & symbolized by "Label"
+    fig = px.scatter(
+        concatenated_df,
+        x=f"{x_var} Centered",
+        y=f"{y_var} Centered",
+        color="Label",
+        symbol="Label",
+        title="Centered Voter & Party Positions with LSNE Arrow"
+    )
+    fig.update_traces(marker=dict(size=8))
+
+    # 3) Find the index of the *first* positive eigenvalue in eigvals_C1:
+    idx_pos = None
+    for idx, val in enumerate(eigvals_C1):
+        if val > 0:
+            idx_pos = idx
+            break
+
+    if idx_pos is not None:
+        # 3a) Extract the corresponding eigenvector and normalize it
+        vec_pos = eigvecs_C1[:, idx_pos]
+        vec_pos = vec_pos / np.linalg.norm(vec_pos)
+
+        # 3b) Tail of arrow = the j0-th party's CENTERED coordinates:
+        x0 = float(party_centered.loc[j0, f"{x_var} Centered"])
+        y0 = float(party_centered.loc[j0, f"{y_var} Centered"])
+
+        # 3c) Compute the head of the arrow by adding arrow_length * (unit eigenvector)
+        dx = vec_pos[0] * arrow_length
+        dy = vec_pos[1] * arrow_length
+
+        # 3d) Add the arrow annotation to the figure
+        fig.add_annotation(
+            x=x0 + dx,
+            y=y0 + dy,
+            ax=x0,
+            ay=y0,
+            xref="x",
+            yref="y",
+            axref="x",
+            ayref="y",
+            showarrow=True,
+            arrowhead=3,
+            arrowsize=1,
+            arrowwidth=2,
+            arrowcolor="black",
+            standoff=2,
+            text=f"j₀ = {party0}",    # Label at the arrowhead
+            font=dict(size=12, color="black")
+        )
+    else:
+        # No positive eigenvalue → no arrow drawn
+        print("No positive eigenvalue found in C1; arrow not drawn.")
+
+    # 4) Final layout touches
+    fig.update_layout(
+        xaxis_title=f"{x_var} Centered",
+        yaxis_title=f"{y_var} Centered",
+        legend_title="Label (party index)"
+    )
+
+    # 5) Show the figure
+    fig.show()
+
+
 if __name__ == "__main__":
 
     party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
@@ -120,3 +197,7 @@ if __name__ == "__main__":
 
     suf = (c < 1)
     print("Sufficient condition (c<1):", suf)
+
+    # Plot data and moving direction of lowest-valence party
+    plot_centered_with_arrow(voter_centered=voter_centered, party_centered=party_centered,
+                             x_var=x_var, y_var=y_var, eigvals_C1=eigvals_C1, eigvecs_C1=eigvecs_C1, j0=j0, party0=party0)
