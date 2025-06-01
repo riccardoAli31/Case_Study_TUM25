@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
-from numpy.linalg import eig
+from numpy.linalg import eig, eigh
 import plotly.express as px
 
 x_var='Democracy'
@@ -144,6 +144,83 @@ def plot_centered_with_arrow(voter_centered: pd.DataFrame, party_centered: pd.Da
     fig.show()
 
 
+def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
+                                    x_var: str, y_var: str) -> pd.DataFrame:
+
+    # 1) Number of parties (p) and voter‐covariance V*
+    p = len(lambda_values)
+
+    # 1a) Compute steady‐state shares rho_j = exp(lambda_j) / sum_k exp(lambda_k)
+    expL = np.exp(lambda_values)
+    rho = expL / expL.sum()
+
+    # 1b) Compute V* = 1/n sum_i ( [x_i^2, x_i y_i; x_i y_i, y_i^2] ), using centered coords
+    xi_1 = voter_centered[f"{x_var} Centered"].to_numpy()
+    xi_2 = voter_centered[f"{y_var} Centered"].to_numpy()
+    n = len(xi_1)
+
+    Vstar = np.zeros((2,2), dtype=float)
+    Vstar[0,0] = np.dot(xi_1, xi_1) / n
+    Vstar[1,1] = np.dot(xi_2, xi_2) / n
+    Vstar[0,1] = Vstar[1,0] = np.dot(xi_1, xi_2) / n
+
+    # 1c) The 2×2 identity
+    I2 = np.eye(2)
+
+    # 2) Prepare containers for results
+    rows = []
+
+    # 3) Iterate over each party j = 0..p-1
+    for j in range(p):
+        # 3a) Compute A_j = beta * (1 - 2*rho_j)
+        Aj = beta * (1 - 2 * rho[j])
+
+        # 3b) Build C_j = 2 * A_j * Vstar - I2
+        Cj = 2 * Aj * Vstar - I2
+
+        # 3c) Compute eigenvalues & eigenvectors of Cj
+        #     We use eigh() since Cj is symmetric. eigh returns them in ascending order, so we'll reverse.
+        eigvals, eigvecs = eigh(Cj)  
+        # eigh returns eigvals sorted: [mu_small, mu_large], and columns of eigvecs are their eigenvectors
+        mu1, mu2 = eigvals[::-1]            # now mu1 >= mu2
+        v1 = eigvecs[:, ::-1].T[0]           # eigenvector for mu1
+        v2 = eigvecs[:, ::-1].T[1]           # eigenvector for mu2
+
+        # 3d) Decide on the “action” based on signs of mu1, mu2
+        if (mu1 < 0) and (mu2 < 0):
+            action = "No movement needed (local max)."
+        elif (mu1 > 0 and mu2 < 0):
+            action = "Saddle → move along eigenvector for μ₁>0."
+        elif (mu2 > 0 and mu1 < 0):
+            action = "Saddle → move along eigenvector for μ₂>0."
+        elif (mu1 == 0 or mu2 == 0):
+            action = "Zero eigenvalue → boundary or degenerate case."
+        else:
+            # If both > 0, that is a local minimum at the origin (rare in LSNE context)
+            action = "Both μ>0 → origin is local minimum (move away in any linear combo)."
+
+        # 3e) Grab the party name from party_centered
+        party_name = party_centered.loc[j, "Party_Name"]
+
+        # 3f) Append a result row
+        rows.append({
+            "class_index": j,
+            "Party_Name":  party_name,
+            "A_j":         Aj,
+            "mu_1":        float(np.round(mu1, 6)),
+            "mu_2":        float(np.round(mu2, 6)),
+            "v_1":         v1,   # length-2 array
+            "v_2":         v2,   # length-2 array
+            "action":      action
+        })
+
+    # 4) Build a DataFrame from the rows
+    result_df = pd.DataFrame(rows)
+    # Sort rows by class_index just for neatness (optional)
+    result_df = result_df.sort_values("class_index").reset_index(drop=True)
+    return result_df
+
+
 if __name__ == "__main__":
 
     party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
@@ -201,3 +278,11 @@ if __name__ == "__main__":
     # Plot data and moving direction of lowest-valence party
     plot_centered_with_arrow(voter_centered=voter_centered, party_centered=party_centered,
                              x_var=x_var, y_var=y_var, eigvals_C1=eigvals_C1, eigvecs_C1=eigvecs_C1, j0=j0, party0=party0)
+    
+    # Compute matrices C_j for each party and gather eigen‐info
+    char_df = compute_characteristic_matrices(lambda_values=lambda_values, beta=beta, voter_centered=voter_centered, party_centered=party_centered,
+                                            x_var=x_var, y_var=y_var)
+    pd.set_option('display.max_columns', None)
+    print("\n----- Characteristic Matrices & Movement Recommendations -----\n")
+    print(char_df)
+    print("\n")
