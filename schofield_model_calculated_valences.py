@@ -135,8 +135,8 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
             "Party_Name":  party_name,
             "mu_1":        float(np.round(mu1, 6)),
             "mu_2":        float(np.round(mu2, 6)),
-            "v_1":         v1,   # length-2 array
-            "v_2":         v2,   # length-2 array
+            # "v_1":         v1,   # length-2 array
+            # "v_2":         v2,   # length-2 array
             "action":      action
         })
 
@@ -544,7 +544,6 @@ party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scale
 # -------------------------------------------------------------- Valences from Multinomial Logistic Regression ------------------------------------------------------------------------
 lambda_values, lambda_df = fit_multinomial_logit(voter_scaled=voter_scaled, party_scaled=party_scaled)
 beta = 0.7
-p    = len(lambda_values)
 
 # ---------------------------------------------------------------------- Equilibrium conditions Check ---------------------------------------------------------------------------------------
 # Identify the low‐valence party (party “1” in Schofield’s notation)
