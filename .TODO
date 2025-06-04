@@ -1,9 +1,10 @@
 TODO
-- Fit the beta parameter using multinomial regression & use external valences ---> no need to fit, for our [0,1] scaling, anything bigger than or equal to 0.5 works
-
 - Check multinomial logistic regression implementation for the model with calculated valences 
+- Beta parameter experimenting
+- Normalize external valences 
 
 - Simulate equilibrium positions for both models [calculated and external valences]
+    - Case with both eigenvalues being positive?
 
 - Write down and formalize the DS model
 - Implement the DS model
@@ -14,3 +15,5 @@ FURTHER IMPROVEMENTS:
 - Check how it evolved for years in the past
 - Do the same for other countries
 - Introduce new variables 
+    - sociodemographic variables
+    - external valences
