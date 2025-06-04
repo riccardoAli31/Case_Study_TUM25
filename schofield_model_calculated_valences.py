@@ -3,7 +3,10 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
 from numpy.linalg import eig, eigh
+from scipy.optimize import minimize
+import plotly.graph_objects as go
 import plotly.express as px
+import matplotlib.pyplot as plt
 
 x_var='Democracy'
 y_var='Education Expansion'
@@ -68,82 +71,6 @@ def fit_multinomial_logit(voter_scaled: pd.DataFrame, party_scaled: pd.DataFrame
     return lambda_vals, lambda_df
 
 
-def plot_centered_with_arrow(voter_centered: pd.DataFrame, party_centered: pd.DataFrame, x_var: str, y_var: str,
-                             eigvals_C1: np.ndarray, eigvecs_C1: np.ndarray, j0: int, party0: str, arrow_length: float = 0.5) -> None:
-    """
-    Plots all centered voter+party points and, if there is a positive eigenvalue in C1,
-    draws an arrow from the lowest‐valence party's centered coordinate in the direction
-    of that eigenvector.
-    """
-
-    # 1) Concatenate the two DataFrames so we can plot them together:
-    concatenated_df = pd.concat([voter_centered, party_centered], ignore_index=True)
-
-    # 2) Build the scatter plot of all CENTERED points, colored & symbolized by "Label"
-    fig = px.scatter(
-        concatenated_df,
-        x=f"{x_var} Centered",
-        y=f"{y_var} Centered",
-        color="Label",
-        symbol="Label",
-        title="Centered Voter & Party Positions with LSNE Arrow"
-    )
-    fig.update_traces(marker=dict(size=8))
-
-    # 3) Find the index of the *first* positive eigenvalue in eigvals_C1:
-    idx_pos = None
-    for idx, val in enumerate(eigvals_C1):
-        if val > 0:
-            idx_pos = idx
-            break
-
-    if idx_pos is not None:
-        # 3a) Extract the corresponding eigenvector and normalize it
-        vec_pos = eigvecs_C1[:, idx_pos]
-        vec_pos = vec_pos / np.linalg.norm(vec_pos)
-
-        # 3b) Tail of arrow = the j0-th party's CENTERED coordinates:
-        x0 = float(party_centered.loc[j0, f"{x_var} Centered"])
-        y0 = float(party_centered.loc[j0, f"{y_var} Centered"])
-
-        # 3c) Compute the head of the arrow by adding arrow_length * (unit eigenvector)
-        dx = vec_pos[0] * arrow_length
-        dy = vec_pos[1] * arrow_length
-
-        # 3d) Add the arrow annotation to the figure
-        fig.add_annotation(
-            x=x0 + dx,
-            y=y0 + dy,
-            ax=x0,
-            ay=y0,
-            xref="x",
-            yref="y",
-            axref="x",
-            ayref="y",
-            showarrow=True,
-            arrowhead=3,
-            arrowsize=1,
-            arrowwidth=2,
-            arrowcolor="black",
-            standoff=2,
-            text=f"j₀ = {party0}",    # Label at the arrowhead
-            font=dict(size=12, color="black")
-        )
-    else:
-        # No positive eigenvalue → no arrow drawn
-        print("No positive eigenvalue found in C1; arrow not drawn.")
-
-    # 4) Final layout touches
-    fig.update_layout(
-        xaxis_title=f"{x_var} Centered",
-        yaxis_title=f"{y_var} Centered",
-        legend_title="Label (party index)"
-    )
-
-    # 5) Show the figure
-    fig.show()
-
-
 def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
                                     x_var: str, y_var: str) -> pd.DataFrame:
 
@@ -206,7 +133,6 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
         rows.append({
             "class_index": j,
             "Party_Name":  party_name,
-            "A_j":         Aj,
             "mu_1":        float(np.round(mu1, 6)),
             "mu_2":        float(np.round(mu2, 6)),
             "v_1":         v1,   # length-2 array
@@ -221,68 +147,488 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
     return result_df
 
 
-if __name__ == "__main__":
+def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
+                                            beta: float, x_var: str, y_var: str, target_party_name: str) -> tuple[np.ndarray, float, float]:
+    """
+    Given:
+      - lambda_values: length‐p array of intercepts (λ₀, …, λ_{p−1}) from your original fit
+      - voter_centered, party_centered: both already centered on (x_var, y_var)
+      - beta: the LSNE β parameter
+      - x_var, y_var: the two dimension names (e.g. 'Democracy', 'Education Expansion')
+      - target_party_name: e.g. 'AfD'
 
-    party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
+    Returns:
+      - v_pos   : a length‐2 numpy array (unit‐normalized eigenvector for C_j’s positive eigenvalue)
+      - t_opt   : scalar t ≥ 0 that maximizes the party’s average vote share
+      - share_opt: the resulting max average vote share
+    """
 
-    party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
-                                columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
+    # 1) Find the integer index j_idx of the target party
+    if target_party_name not in party_centered["Party_Name"].values:
+        raise ValueError(f"Party '{target_party_name}' not found in party_centered['Party_Name'].")
+    j_idx = int(party_centered.index[party_centered["Party_Name"] == target_party_name][0])
 
-    party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
+    # 2) Recover Y (n×2) and Z (p×2) from the centered DataFrames:
+    Y = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)   # shape = (n,2)
+    Z = party_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)   # shape = (p,2)
 
-    lambda_values, lambda_df = fit_multinomial_logit(voter_scaled=voter_scaled, party_scaled=party_scaled)
-    beta = 0.6
-
-    # 1) Identify the low‐valence party (party “1” in Schofield’s notation)
-    j0 = np.argmin(lambda_values)
-    party0 = party_scaled['Party_Name'].iloc[j0]
-
-    # 2) Build its A₁ and C₁
+    # 3) Compute ρ from the provided lambda_values:
     expL = np.exp(lambda_values)
-    rho  = expL / expL.sum()                # steady‐state shares ρ_j
-    A    = beta * (1 - 2*rho)               # A_j = β(1–2ρ_j)
-    A1   = A[j0]                            # this is A₁
+    rho  = expL / expL.sum()   # length‐p array
 
-    # 3) Characteristic matrix C₁ = 2 A₁ V* – I
-    xi_1 = voter_centered[f'{x_var} Centered'].values
-    xi_2 = voter_centered[f'{y_var} Centered'].values
-    covariance_matrix = np.zeros((2,2))
-    covariance_matrix[0,0] = np.dot(xi_1, xi_1)
-    covariance_matrix[1,1] = np.dot(xi_2, xi_2)
-    covariance_matrix[0,1] =  covariance_matrix[1,0] = np.dot(xi_1, xi_2)
-    covariance_matrix *= 1 / len(xi_1)
+    # 4) Build the “electoral covariance” V* from the voter coordinates:
+    xi = voter_centered[f"{x_var} Centered"].to_numpy()
+    yi = voter_centered[f"{y_var} Centered"].to_numpy()
+    n  = len(xi)
 
-    I2   = np.eye(2)
-    C1   = 2 * A1 * covariance_matrix - I2
+    Vstar = np.zeros((2,2), dtype=float)
+    Vstar[0,0] = np.dot(xi, xi) / n
+    Vstar[1,1] = np.dot(yi, yi) / n
+    Vstar[0,1] = Vstar[1,0] = np.dot(xi, yi) / n
 
-    # 4) Eigen‐decompose C₁
-    eigvals_C1, eigvecs_C1 = eig(C1)
+    I2 = np.eye(2)
 
-    print(f"Lowest‐valence party is {party0!r}")
-    print("Eigenvalues of C₁:", np.round(eigvals_C1,3))
-    print("Eigenvectors (as columns):\n", np.round(eigvecs_C1,3))
+    # 5) Characteristic matrix for party j:  C_j = 2·A_j·V* − I₂,  where A_j = β·(1−2ρ_j)
+    A = beta * (1 - 2 * rho)    # length‐p
+    A_j = A[j_idx]
+    C_j = 2 * A_j * Vstar - I2
 
-    # —–– 1) Necessary condition for joint origin LSNE —––
-    nec = np.all(eigvals_C1 < 0)
-    print("Necessary condition (all eig(C₁)<0):", nec)
+    # 6) Eigen‐decompose C_j; pick the eigenvector for the strictly positive eigenvalue
+    eigvals, eigvecs = eigh(C_j)  # eigh returns sorted ascending
+    μ_small, μ_large = eigvals[0], eigvals[1]
+    if μ_large <= 0:
+        raise RuntimeError(
+            f"Party '{target_party_name}' has no strictly positive eigenvalue (largest eigenvalue = {μ_large:.6f})."
+        )
+    # The column eigvecs[:,1] corresponds to μ_large:
+    v_pos = eigvecs[:, 1].real
+    v_pos = v_pos / np.linalg.norm(v_pos)   # normalize to length 1
 
-    # —–– 2) Sufficient condition (Corollary 2) —––
-    # In 2D, ν² = trace(V*)
-    nu2 = np.trace(covariance_matrix)
-    c   = 2 * A1 * nu2
-    print(f"Convergence coeff. c = 2·A₁·ν² = {c:.3f}")
+    # 7) Define the average vote share function
+    def vote_share_given_t(t_scalar: float) -> float:
+        """
+        Move party j to (t_scalar * v_pos). Recompute D_new = -||Y − Z_new||²,
+        then form logit-numerators D_new[i,j] + λ_j. Finally, do a rowwise softmax
+        and return the average probability that i chooses j.
+        """
+        # 7a) Make a copy of Z and move party j:
+        Z_new = Z.copy()
+        Z_new[j_idx, :] = t_scalar * v_pos
 
-    suf = (c < 1)
-    print("Sufficient condition (c<1):", suf)
+        # 7b) Compute new squared distances and D_new = -dist²:
+        dist2_new = ((Y[:, None, :] - Z_new[None, :, :])**2).sum(axis=2)  # shape (n,p)
+        D_new     = -dist2_new
 
-    # Plot data and moving direction of lowest-valence party
-    plot_centered_with_arrow(voter_centered=voter_centered, party_centered=party_centered,
-                             x_var=x_var, y_var=y_var, eigvals_C1=eigvals_C1, eigvecs_C1=eigvecs_C1, j0=j0, party0=party0)
-    
-    # Compute matrices C_j for each party and gather eigen‐info
-    char_df = compute_characteristic_matrices(lambda_values=lambda_values, beta=beta, voter_centered=voter_centered, party_centered=party_centered,
-                                            x_var=x_var, y_var=y_var)
-    pd.set_option('display.max_columns', None)
-    print("\n----- Characteristic Matrices & Movement Recommendations -----\n")
-    print(char_df)
-    print("\n")
+        # 7c) Build logit_numerators (n×p) = D_new + λ_j * 1_nrow
+        #     λ_j is length p, so broadcast down each row:
+        logit_num = D_new + lambda_values[None, :]    # shape (n,p)
+
+        # 7d) Convert row‐by‐row to probabilities via softmax:
+        row_max = np.max(logit_num, axis=1, keepdims=True)
+        exp_t   = np.exp(logit_num - row_max)
+        denom   = exp_t.sum(axis=1, keepdims=True)
+        probs   = exp_t / denom   # shape (n,p)
+
+        # 7e) The average probability that each voter i chooses party j_idx:
+        return float(probs[:, j_idx].mean())
+
+    # 8) Now find t_opt that maximizes vote_share
+    #    We do a bounded 1D optimization 
+    def neg_share(t_scalar: float) -> float:
+        return -vote_share_given_t(t_scalar)
+
+    bracket = (-100, 100)
+    result  = minimize(
+        fun = neg_share,
+        x0  = np.array([0]),    
+        bounds = [bracket],
+        method = "L-BFGS-B"
+    )
+    t_opt     = float(result.x[0])
+    share_opt = vote_share_given_t(t_opt)
+
+    return v_pos, t_opt, share_opt
+
+
+def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, voter_centered: pd.DataFrame, party_centered: pd.DataFrame, 
+                            target_party_name: str, x_var: str, y_var: str):
+    """
+    Perform a full 2-D optimization for party `target_party_name` to maximize its average MNL vote share.
+    This function does the following steps:
+      1) Runs a multi-start optimizer (L-BFGS-B, with Nelder-Mead fallback) from several random jitters.
+      2) Prints and returns the best location and share found, plus a label of which method succeeded.
+
+    Inputs:
+      - lambda_values   : shape (p,), the intercept array λ₀,...,λ_{p−1} from fit_multinomial_logit.
+      - voter_centered  : DataFrame with columns [f"{x_var} Centered", f"{y_var} Centered", "party_choice", ...].
+      - party_centered  : DataFrame with columns ["Party_Name", f"{x_var} Centered", f"{y_var} Centered", ...].
+      - target_party_name: A string matching one row of party_centered["Party_Name"], e.g. "FDP".
+      - x_var, y_var    : The two dimension names, e.g. "Democracy" and "Education Expansion".
+
+    Returns:
+      - best_z    : np.ndarray of shape (2,), the optimal (centered) coordinate for the target party.
+      - best_share: float, the maximum average vote share achieved by this party.
+      - best_info : str, description of how that optimum was found
+                    (e.g. "original", "L-BFGS-B from jitter...", or "Nelder-Mead from jitter...").
+    """
+
+    # -------------------------------------
+    # Extract Y (n×2) and Z_all (p×2) & find j_idx
+    # -------------------------------------
+    Y = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)  # shape = (n,2)
+    Z_all = party_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)  # shape = (p,2)
+
+    if target_party_name not in party_centered["Party_Name"].values:
+        raise ValueError(f"Party '{target_party_name}' not found in party_centered.")
+
+    j_idx = int(party_centered.index[party_centered["Party_Name"] == target_party_name][0])
+    z0 = Z_all[j_idx].copy()  # original location of the target party
+
+    n, p = Y.shape[0], Z_all.shape[0]
+
+    # -------------------------------------
+    # Define vote_share(z): average MNL share if party j sits at z
+    # -------------------------------------
+    def vote_share(z_vec: np.ndarray) -> float:
+        """
+        Compute the average MNL probability that voters pick party j
+        when that party’s coordinate is z_vec.
+        """
+        # 2a) Compute U_new for all voters i, all parties k:
+        #     U_{i j} = -|| x_i - z_vec ||^2 + λ_j
+        #     U_{i k} = -|| x_i - Z_all[k] ||^2 + λ_k     (for k != j)
+        diff_j = Y - z_vec                                          # shape = (n,2)
+        dist2_j = np.sum(diff_j**2, axis=1)                         # shape = (n,)
+        U_j = -dist2_j + lambda_values[j_idx]                       # shape = (n,)
+
+        U_new = np.zeros((n, p), dtype=float)
+        U_new[:, j_idx] = U_j
+        for k in range(p):
+            if k == j_idx:
+                continue
+            diff_k = Y - Z_all[k]                                    # (n,2)
+            dist2_k = np.sum(diff_k**2, axis=1)                      # (n,)
+            U_new[:, k] = -dist2_k + lambda_values[k]                # (n,)
+
+        # 2b) Convert U_new → probabilities via rowwise softmax
+        row_max = np.max(U_new, axis=1, keepdims=True)               # (n,1)
+        expU = np.exp(U_new - row_max)                               # (n,p)
+        denom = np.sum(expU, axis=1, keepdims=True)                 # (n,1)
+        probs = expU / denom                                         # (n,p)
+        p_j = probs[:, j_idx]                                        # (n,)
+
+        # 2c) Return the average probability for party j
+        return float(np.mean(p_j))
+
+    # -------------------------------------
+    # Define obj_and_grad(z): returns (−f(z), −∇f(z)) for SciPy minimize
+    # -------------------------------------
+    def obj_and_grad(z_vec: np.ndarray):
+        """
+        Return (−f(z), −∇f(z)) so that SciPy’s `minimize` can minimize −f.
+        We use the fact that:
+          ∇_z f(z) = (−2/n) ∑_i (z - x_i) p_{i j}(z) [1 - p_{i j}(z)].
+        """
+        # 3a) Build U_new exactly like in vote_share
+        diff_j = Y - z_vec
+        dist2_j = np.sum(diff_j**2, axis=1)
+        U_j = -dist2_j + lambda_values[j_idx]
+
+        U_new = np.zeros((n, p), dtype=float)
+        U_new[:, j_idx] = U_j
+        for k in range(p):
+            if k == j_idx:
+                continue
+            diff_k = Y - Z_all[k]
+            dist2_k = np.sum(diff_k**2, axis=1)
+            U_new[:, k] = -dist2_k + lambda_values[k]
+
+        # 3b) Rowwise softmax → probabilities
+        row_max = np.max(U_new, axis=1, keepdims=True)
+        expU = np.exp(U_new - row_max)
+        denom = np.sum(expU, axis=1, keepdims=True)
+        probs = expU / denom                                   # (n,p)
+        p_j = probs[:, j_idx]                                  # (n,)
+
+        # 3c) Compute f(z) = ∑ p_j / n
+        f_val = np.mean(p_j)
+
+        # 3d) Compute gradient: (−2/n) ∑_i (z - x_i) p_j[i] [1 - p_j[i]]
+        w = p_j * (1.0 - p_j)                                   # (n,)
+        weighted_diff = diff_j * w[:, None]                     # (n,2)
+        grad_f = (-2.0 / n) * np.sum(weighted_diff, axis=0)     # (2,)
+
+        return -f_val, -grad_f
+
+    # -------------------------------------
+    # Diagnostic at the original point z0
+    # -------------------------------------
+    neg_f0, neg_grad0 = obj_and_grad(z0)
+    f0 = -neg_f0
+    grad0 = -neg_grad0
+
+    # -------------------------------------
+    # Multi-start optimization
+    # -------------------------------------
+    best_z = z0.copy()
+    best_share = f0
+    best_info = "original (no uphill found)"
+
+    # Pre-generate random offsets
+    rng = np.random.default_rng(seed=42)
+    jitter_radii = [0.1, 0.2, 0.5, 1.0]
+
+    print("\n=== Multi-start Optimization ===")
+    for rad in jitter_radii:
+        for trial in range(5):
+            θ = 2 * np.pi * rng.random()
+            r = rad * rng.random()
+            offset = np.array([r * np.cos(θ), r * np.sin(θ)])
+            z_start = z0 + offset
+
+            # Try L-BFGS-B from this start
+            res = minimize(
+                fun=obj_and_grad,
+                x0=z_start,
+                jac=True,
+                method="L-BFGS-B",
+                bounds=[(None, None), (None, None)],
+                options={"gtol": 1e-4, "ftol": 1e-8, "maxiter": 500, "disp": False}
+            )
+            if res.success:
+                share_res = vote_share(res.x)
+                if share_res > best_share + 1e-8:
+                    best_share = share_res
+                    best_z = res.x.copy()
+                    best_info = f"L-BFGS-B from rad={rad:.2f}, trial={trial}"
+            else:
+                # Fallback to Nelder-Mead if L-BFGS-B fails
+                res_nm = minimize(
+                    fun=lambda z: -vote_share(z),
+                    x0=z_start,
+                    method="Nelder-Mead",
+                    options={"xatol": 1e-6, "fatol": 1e-6, "maxiter": 1000, "disp": False}
+                )
+                if res_nm.success:
+                    share_nm = vote_share(res_nm.x)
+                    if share_nm > best_share + 1e-8:
+                        best_share = share_nm
+                        best_z = res_nm.x.copy()
+                        best_info = f"Nelder-Mead from rad={rad:.2f}, trial={trial}"
+
+    # -------------------------------------
+    # Final results
+    # -------------------------------------
+    print("\n=== Optimization Results ===")
+    print(f"Best location for {target_party_name}: {best_z.round(4)}")
+    print(f"Best average share: {best_share:.6f}")
+    print(f"Found by: {best_info}")
+
+    return best_z, best_share, best_info
+
+
+def plot_optima(voter_centered, party_centered, directions: dict[str, tuple[np.ndarray, float]], optima: dict[str, np.ndarray],
+                x_var: str, y_var: str) -> go.Figure:
+   
+    # 1) Extract voter coordinates
+    xi = voter_centered[f"{x_var} Centered"].to_numpy()
+    yi = voter_centered[f"{y_var} Centered"].to_numpy()
+
+    # 2) Extract all party coordinates + names
+    zx_all = party_centered[f"{x_var} Centered"].to_numpy()
+    zy_all = party_centered[f"{y_var} Centered"].to_numpy()
+    names_all = party_centered["Party_Name"].tolist()
+
+    # 3) Build a mapping from party_name → (current_x, current_y)
+    party_coords = {
+        row["Party_Name"]: np.array([row[f"{x_var} Centered"], row[f"{y_var} Centered"]])
+        for _, row in party_centered.iterrows()}
+
+    # 4) Initialize the figure
+    fig = go.Figure()
+
+    # 4a) Plot all voters (light gray)
+    fig.add_trace(go.Scatter(
+        x = xi,
+        y = yi,
+        mode   = "markers",
+        marker = dict(size=4, color="lightgray"),
+        name   = "Voters"
+    ))
+
+    # 4b) Plot all current party centroids (blue + text)
+    fig.add_trace(go.Scatter(
+        x = zx_all,
+        y = zy_all,
+        mode   = "markers+text",
+        marker = dict(size=10, color="blue"),
+        text = names_all,
+        textposition = "top center",
+        name = "Party Centroids"
+    ))
+
+    # 5) For each party in `directions`, draw the two‐sided line + green dot
+    line_length = 2.0
+
+    for party_name, (v_pos, t_opt) in directions.items():
+        if party_name not in party_coords:
+            raise ValueError(f"Party '{party_name}' not found in party_centered.")
+        z_current = party_coords[party_name]   # length‐2 array
+
+        # 5a) Two‐sided red line endpoints
+        x_start = z_current[0] - line_length * v_pos[0]
+        y_start = z_current[1] - line_length * v_pos[1]
+        x_end   = z_current[0] + line_length * v_pos[0]
+        y_end   = z_current[1] + line_length * v_pos[1]
+
+        # Plot the red line
+        fig.add_trace(go.Scatter(
+            x = [x_start, x_end],
+            y = [y_start, y_end],
+            mode   = "lines",
+            line   = dict(color="red", width=2),
+            name   = f"{party_name} Direction"
+        ))
+
+        # 5b) Green dot at the optimal point: z_current + t_opt * v_pos
+        z_opt_pt = z_current + t_opt * v_pos
+        fig.add_trace(go.Scatter(
+            x = [z_opt_pt[0]],
+            y = [z_opt_pt[1]],
+            mode   = "markers+text",
+            marker = dict(size=12, color="green"),
+            text   = [f"Optimal {party_name}\n(t={t_opt:.2f})"],
+            textposition = "bottom right",
+            name   = f"{party_name} Opt (1D)"))
+
+    # 6) For each party in `optima`, draw a star at z_opt
+    star_colors = ["purple", "darkcyan", "magenta", "orange", "gold", "teal", "crimson"]
+    color_index = 0
+
+    for party_name, z_opt in optima.items():
+        if not isinstance(z_opt, (list, tuple, np.ndarray)) or len(z_opt) != 2:
+            raise ValueError(f"Optimal location for '{party_name}' must be a length‐2 array.")
+        if party_name not in party_coords:
+            pass
+
+        # Choose color
+        color = star_colors[color_index % len(star_colors)]
+        color_index += 1
+
+        fig.add_trace(go.Scatter(
+            x = [z_opt[0]],
+            y = [z_opt[1]],
+            mode   = "markers+text",
+            marker = dict(size=14, symbol="star", color=color),
+            text   = [f"Optimal {party_name}"],
+            textposition = "top left",
+            name   = f"{party_name} Opt (2D)"
+        ))
+
+    # 7) Final layout tweaks
+    fig.update_layout(
+        title       = "Centered Voter Cloud & Party Optima",
+        xaxis_title = f"{x_var} (Centered)",
+        yaxis_title = f"{y_var} (Centered)",
+        showlegend  = True
+    )
+
+    return fig
+
+# --------------------------------------------------------------------------- Data Preprocessing ---------------------------------------------------------------------------------------
+party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
+party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
+                            columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
+party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
+
+# -------------------------------------------------------------- Valences from Multinomial Logistic Regression ------------------------------------------------------------------------
+lambda_values, lambda_df = fit_multinomial_logit(voter_scaled=voter_scaled, party_scaled=party_scaled)
+beta = 0.7
+p    = len(lambda_values)
+
+# ---------------------------------------------------------------------- Equilibrium conditions Check ---------------------------------------------------------------------------------------
+# Identify the low‐valence party (party “1” in Schofield’s notation)
+j0 = np.argmin(lambda_values)
+party0 = party_scaled['Party_Name'].iloc[j0]
+# Build its A₁ and C₁
+expL = np.exp(lambda_values)
+rho  = expL / expL.sum()                # steady‐state shares ρ_j
+A    = beta * (1 - 2*rho)               # A_j = β(1–2ρ_j)
+A1   = A[j0]                            # this is A₁
+# Characteristic matrix C₁ = 2 A₁ V* – I
+xi_1 = voter_centered[f'{x_var} Centered'].values
+xi_2 = voter_centered[f'{y_var} Centered'].values
+covariance_matrix = np.zeros((2,2))
+covariance_matrix[0,0] = np.dot(xi_1, xi_1)
+covariance_matrix[1,1] = np.dot(xi_2, xi_2)
+covariance_matrix[0,1] =  covariance_matrix[1,0] = np.dot(xi_1, xi_2)
+covariance_matrix *= 1 / len(xi_1)
+I2   = np.eye(2)
+C1   = 2 * A1 * covariance_matrix - I2
+# Eigen‐decompose C₁
+eigvals_C1, eigvecs_C1 = eig(C1)
+print(f"Lowest‐valence party is {party0!r}")
+print("Eigenvalues of C₁:", np.round(eigvals_C1,3))
+print("Eigenvectors (as columns):\n", np.round(eigvecs_C1,3))
+# —–– 1) Necessary condition for joint origin LSNE —––
+nec = np.all(eigvals_C1 < 0)
+print("Necessary condition (all eig(C₁)<0):", nec)
+# —–– 2) Sufficient condition (Corollary 2) —––
+# In 2D, ν² = trace(V*)
+nu2 = np.trace(covariance_matrix)
+c   = 2 * A1 * nu2
+print(f"Convergence coeff. c = 2·A₁·ν² = {c:.3f}")
+suf = (c < 1)
+print("Sufficient condition (c<1):", suf)
+
+# -------------------------------------------------------------- Movement Recommendations for each party ---------------------------------------------------------------------------------------
+# Compute matrices C_j for each party and gather eigen‐info
+char_df = compute_characteristic_matrices(lambda_values=lambda_values, beta=beta, voter_centered=voter_centered, party_centered=party_centered,
+                                        x_var=x_var, y_var=y_var)
+pd.set_option('display.max_columns', None)
+print("\n----- Characteristic Matrices & Movement Recommendations -----\n")
+print(char_df)
+print("\n")
+
+# -------------------------------------------------------------------------- ANALYZE Saddle Points -----------------------------------------------------------------------------------
+target = "AfD"
+# Compute the positive‐eigenvalue direction, the optimal t, and the max share:
+v_pos_afd, t_opt_afd, share_opt_afd = compute_optimal_movement_saddle_position(
+    lambda_values   = lambda_values,
+    voter_centered  = voter_centered,
+    party_centered  = party_centered,
+    beta            = beta,
+    x_var           = x_var,
+    y_var           = y_var,
+    target_party_name = target)
+
+print(f"Party {target} moves along direction {v_pos_afd.round(3)}; "
+      f"optimal t = {t_opt_afd:.3f}; max share ≈ {share_opt_afd:.3f}")
+
+# -------------------------------------------------------------------------- ANALYZE Local Minimum Points -----------------------------------------------------------------------------------
+z_fdp_opt, fdp_share_opt, info = compute_optimal_movement_local_min_position(
+    lambda_values    = lambda_values,
+    voter_centered   = voter_centered,
+    party_centered   = party_centered,
+    target_party_name= "FDP",
+    x_var            = x_var,
+    y_var            = y_var)
+
+z_cdu_opt, cdu_share_opt, info = compute_optimal_movement_local_min_position(
+    lambda_values    = lambda_values,
+    voter_centered   = voter_centered,
+    party_centered   = party_centered,
+    target_party_name= "CDU/CSU",
+    x_var            = x_var,
+    y_var            = y_var)
+
+
+# -------------------------------------------------------------------- Plot data cloud and equilibrium positions -----------------------------------------------------------------------------------
+directions = {"AfD": (v_pos_afd, t_opt_afd)}
+
+optima = {"FDP": z_fdp_opt, "CDU/CSU": z_cdu_opt}
+
+fig = plot_optima(voter_centered = voter_centered, party_centered = party_centered,
+                  directions = directions, optima = optima, x_var = x_var, y_var = y_var)
+fig.show()
+
