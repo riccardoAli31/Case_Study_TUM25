@@ -1,8 +1,10 @@
 TODO
-- Check multinomial logistic regression implementation for the model with calculated valences 
-- Beta parameter experimenting
-- Normalize external valences 
 
+- Beta parameter experimenting
+- Normalize external valences and rerun with new valences
+- Check Data from previous times back to 2007
+- reconsider feature space 
+- look at software for papers
 - Simulate equilibrium positions for both models [calculated and external valences]
     - Case with both eigenvalues being positive?
 
@@ -12,6 +14,7 @@ TODO
 - How to merge the two approaches?
 
 FURTHER IMPROVEMENTS:
+
 - Check how it evolved for years in the past
 - Do the same for other countries
 - Introduce new variables 
