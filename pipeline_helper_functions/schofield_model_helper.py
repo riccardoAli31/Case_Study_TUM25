@@ -6,12 +6,8 @@ import plotly.graph_objects as go
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
 
-x_var='Democracy'
-y_var='Education Expansion'
 
-
-def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataFrame, 
-                          centered_cols: tuple[str,str] = (f"{x_var} Centered", f"{y_var} Centered")) -> tuple[np.ndarray, pd.DataFrame]:
+def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataFrame, x_var:str, y_var:str) -> tuple[np.ndarray, pd.DataFrame]:
     """
     Fits a “simple” multinomial logit using sklearn on the (n × p) matrix D of negative squared distances:
         D[i,j] = -|| x_i - z_j ||^2,
@@ -22,7 +18,7 @@ def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataF
       - lambda_df  : DataFrame with columns ["class_index","Party_Name","Valence"], sorted by descending Valence.
       - beta_hat   : a single scalar, taken as the average of diag(coef_matrix).  (Warning printed if off‐diagonals are large.)
     """
-
+    centered_cols = (f"{x_var} Centered", f"{y_var} Centered")
     # 1) Extract voter and party coordinates as NumPy arrays
     Y = voter_centered[list(centered_cols)].to_numpy(dtype=float)   # shape = (n, 2)
     Z = party_centered[list(centered_cols)].to_numpy(dtype=float)   # shape = (p, 2)
@@ -468,60 +464,66 @@ def plot_optima(voter_centered, party_centered, directions: dict[str, tuple[np.n
     # 5) For each party in `directions`, draw the two‐sided line + green dot
     line_length = 2.0
 
-    for party_name, (v_pos, t_opt) in directions.items():
-        if party_name not in party_coords:
-            raise ValueError(f"Party '{party_name}' not found in party_centered.")
-        z_current = party_coords[party_name]   # length‐2 array
+    if directions is not None:
+        for party_name, (v_pos, t_opt) in directions.items():
+            if party_name not in party_coords:
+                raise ValueError(f"Party '{party_name}' not found in party_centered.")
+            z_current = party_coords[party_name]   # length‐2 array
 
-        # 5a) Two‐sided red line endpoints
-        x_start = z_current[0] - line_length * v_pos[0]
-        y_start = z_current[1] - line_length * v_pos[1]
-        x_end   = z_current[0] + line_length * v_pos[0]
-        y_end   = z_current[1] + line_length * v_pos[1]
+            # 5a) Two‐sided red line endpoints
+            x_start = z_current[0] - line_length * v_pos[0]
+            y_start = z_current[1] - line_length * v_pos[1]
+            x_end   = z_current[0] + line_length * v_pos[0]
+            y_end   = z_current[1] + line_length * v_pos[1]
 
-        # Plot the red line
-        fig.add_trace(go.Scatter(
-            x = [x_start, x_end],
-            y = [y_start, y_end],
-            mode   = "lines",
-            line   = dict(color="red", width=2),
-            name   = f"{party_name} Direction"
-        ))
+            # Plot the red line
+            fig.add_trace(go.Scatter(
+                x = [x_start, x_end],
+                y = [y_start, y_end],
+                mode   = "lines",
+                line   = dict(color="red", width=2),
+                name   = f"{party_name} Direction"
+            ))
 
-        # 5b) Green dot at the optimal point: z_current + t_opt * v_pos
-        z_opt_pt = z_current + t_opt * v_pos
-        fig.add_trace(go.Scatter(
-            x = [z_opt_pt[0]],
-            y = [z_opt_pt[1]],
-            mode   = "markers+text",
-            marker = dict(size=12, color="green"),
-            text   = [f"Optimal {party_name}\n(t={t_opt:.2f})"],
-            textposition = "bottom right",
-            name   = f"{party_name} Opt (1D)"))
+            # 5b) Green dot at the optimal point: z_current + t_opt * v_pos
+            z_opt_pt = z_current + t_opt * v_pos
+            fig.add_trace(go.Scatter(
+                x = [z_opt_pt[0]],
+                y = [z_opt_pt[1]],
+                mode   = "markers+text",
+                marker = dict(size=12, color="green"),
+                text   = [f"Optimal {party_name}\n(t={t_opt:.2f})"],
+                textposition = "bottom right",
+                name   = f"{party_name} Opt (1D)"))
+    else:
+        pass
 
     # 6) For each party in `optima`, draw a star at z_opt
     star_colors = ["purple", "darkcyan", "magenta", "orange", "gold", "teal", "crimson"]
     color_index = 0
 
-    for party_name, z_opt in optima.items():
-        if not isinstance(z_opt, (list, tuple, np.ndarray)) or len(z_opt) != 2:
-            raise ValueError(f"Optimal location for '{party_name}' must be a length‐2 array.")
-        if party_name not in party_coords:
-            pass
+    if optima is not None:
+        for party_name, z_opt in optima.items():
+            if not isinstance(z_opt, (list, tuple, np.ndarray)) or len(z_opt) != 2:
+                raise ValueError(f"Optimal location for '{party_name}' must be a length‐2 array.")
+            if party_name not in party_coords:
+                pass
 
-        # Choose color
-        color = star_colors[color_index % len(star_colors)]
-        color_index += 1
+            # Choose color
+            color = star_colors[color_index % len(star_colors)]
+            color_index += 1
 
-        fig.add_trace(go.Scatter(
-            x = [z_opt[0]],
-            y = [z_opt[1]],
-            mode   = "markers+text",
-            marker = dict(size=14, symbol="star", color=color),
-            text   = [f"Optimal {party_name}"],
-            textposition = "top left",
-            name   = f"{party_name} Opt (2D)"
-        ))
+            fig.add_trace(go.Scatter(
+                x = [z_opt[0]],
+                y = [z_opt[1]],
+                mode   = "markers+text",
+                marker = dict(size=14, symbol="star", color=color),
+                text   = [f"Optimal {party_name}"],
+                textposition = "top left",
+                name   = f"{party_name} Opt (2D)"
+            ))
+    else:
+        pass
 
     # 7) Final layout tweaks
     fig.update_layout(
