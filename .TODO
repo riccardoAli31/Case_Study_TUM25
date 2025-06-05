@@ -1,14 +1,14 @@
 TODO
+- Reconsider feature space - DONE
+- Beta parameter experimenting - DONE
 
-- Beta parameter experimenting
 - Normalize external valences and rerun with new valences
-- Check Data from previous times back to 2007
-- reconsider feature space 
-- look at software for papers
+
+- Check voter data from previous years back to 2007
+
 - Simulate equilibrium positions for both models [calculated and external valences]
     - Case with both eigenvalues being positive?
 
-- Write down and formalize the DS model
 - Implement the DS model
 
 - How to merge the two approaches?
