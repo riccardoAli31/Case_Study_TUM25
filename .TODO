@@ -1,13 +1,13 @@
 TODO
-- Reconsider feature space - DONE
-- Beta parameter experimenting - DONE
+- Automate functions to run without specifying manually which parties are in saddle points/local min
+- Add directions in axis labels of the plot (i.e. Democracy ---> Authoritarian-Democratic)
+- Gaussian KDE with initial and equilibrium positions 
 
 - Normalize external valences and rerun with new valences
+    - Compare with results from model with calculated valences
 
 - Check voter data from previous years back to 2007
-
-- Simulate equilibrium positions for both models [calculated and external valences]
-    - Case with both eigenvalues being positive?
+- Run the model for past years and compare results
 
 - Implement the DS model
 
