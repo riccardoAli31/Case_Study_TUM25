@@ -157,3 +157,54 @@ def center_party_voter_data(voter_df, party_df, x_var, y_var):
     party_df[y_centered_col] = party_df[y_scaled_col].astype(float) - mean_series[y_scaled_col]
 
     return party_df, voter_df
+
+
+def get_valence_from_gesis(politicians: dict) -> pd.DataFrame:
+    """Extract the valences of the parties given in *politicians* as df
+
+    Parameters
+    ----------
+    politicians : dict
+        has the form {name1: party1, name2: party2,...}, e.g. {"soeder": "CSU", "habeck": "GREENS"}
+
+    Returns
+    -------
+    pd.DataFrame
+        df with columns for name of politician, party of politician and the valence
+
+    Raises
+    ------
+    KeyError
+        if not all politicians were found in gesis data
+    """
+    df, _ = dl.get_gesis_data()
+
+    politicians_names = tuple(politicians.keys())
+    # filter df to only get the opinion columns, which always have the form
+    # "opinion on:name", e.g. "opinion on:soeder"
+    cols = [col for col in df.columns if col.endswith(politicians_names)]
+    df = df[cols].copy()
+
+    # scale Data using standartscaler
+    scaler = StandardScaler()
+    scaler.fit(df)
+    df = pd.DataFrame(scaler.transform(df), columns=scaler.get_feature_names_out())
+
+    # aggregate over all voters to get one valence value
+    df = df.aggregate("median", axis=0).to_frame("valence")
+
+    # create two new columns for the name of the politicians and the party
+    df["politician"] = df.index
+    df["politician"] = df["politician"].apply(lambda s: s.split(":")[-1])
+    df["party"] = df["politician"].apply(lambda s: politicians[s])
+    df.index = np.arange(len(df))
+
+    # if there are more politicians in politicians than in the actual survey
+    if len(politicians) != len(df):
+        missing_politicians = [politician for politician in politicians if politician not in list(df["politician"])]
+        raise KeyError(f"The politicians {missing_politicians} were not found in survey.")
+    
+    # if there are multiple top candiates for one party, we take the mean
+    df = df.groupby("party", as_index=False).agg({"politician": ' '.join, "valence": "mean"})
+
+    return df
