@@ -3,9 +3,6 @@ TODO
 - Add directions in axis labels of the plot (i.e. Democracy ---> Authoritarian-Democratic)
 - Gaussian KDE with initial and equilibrium positions 
 
-- Normalize external valences and rerun with new valences
-    - Compare with results from model with calculated valences
-
 - Check voter data from previous years back to 2007
 - Run the model for past years and compare results
 
