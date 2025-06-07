@@ -36,20 +36,14 @@ def get_raw_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folde
 
     # Create aggregated features for the voters'data 
     # Since for one variable of the party's data, we have a few corresponding ones from the voters'data, we'll have to aggregate the voter's feature into one
-    # ---> Average of the variables for each policy dimension
-    def feature_aggregation(row, features):
-        vals = row[features].astype(float).values
-        if vals.size == 0:
-            return np.nan
-        sorted_vals = np.sort(vals)[::-1]
-        # build an array of 1/n for however many items there are
-        weights = np.ones(sorted_vals.size) / sorted_vals.size
-        return np.dot(sorted_vals, weights)
-
     # --- Aggregate voter features for each dimension ---
     for dim in (x_var, y_var):
         vars_to_agg = filtered_mapping[dim]
-        voter_df[dim] = voter_df.apply(lambda row: feature_aggregation(row, vars_to_agg), axis=1)
+        if len(vars_to_agg) == 0:
+            raise RuntimeError(f"For the variable {dim} there are no features to aggregate")
+        weights = np.ones(len(vars_to_agg)) / len(vars_to_agg)
+        voter_df[dim] = voter_df[vars_to_agg].dot(weights)
+
 
     voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote(a)', 'do you incline towards a party, if so which one(a)', 
                         'how strongly do you incline towards this party']].copy()
