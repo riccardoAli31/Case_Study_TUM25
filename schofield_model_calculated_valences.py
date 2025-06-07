@@ -15,6 +15,22 @@ party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scale
 
 # --------------------------------------------------- Valences from Multinomial Logistic Regression ------------------------------------------------------------------------
 lambda_values, lambda_df = sm.fit_multinomial_logit(voter_centered=voter_centered, party_centered=party_centered, x_var=x_var, y_var=y_var)
+
+# external valences
+def get_external_valences():
+    politicians = {"chrupalla": "AfD", "soeder": "CDU/CSU", "scholz": "SPD", "laschet": "CDU/CSU", "baerbock": "90/Greens", "weidel": "AfD", 
+                "lindner": "FDP", "wissler": "LINKE", "bartsch": "LINKE"}
+    valences = dp.get_valence_from_gesis(politicians)
+
+    # sort it in the same order as lambda_values
+    custom_dict = {"90/Greens": 0, "LINKE": 1, "SPD": 2, "FDP": 3, "CDU/CSU": 4, "AfD": 5}
+    valences = valences.sort_values(by="party", key=lambda x: x.map(custom_dict))
+    
+    return valences["valence"].values
+
+lambda_values = get_external_valences()
+
+
 beta = 0.6
 
 # ---------------------------------------------------------- Equilibrium conditions Check ---------------------------------------------------------------------------------------
@@ -62,7 +78,7 @@ print(char_df)
 print("\n")
 
 # ---------------------------------------------------------- ANALYZE Saddle Points -----------------------------------------------------------------------------------
-saddle_targets = ["AfD", "90/Greens", "FDP", "CDU/CSU"]   
+saddle_targets = ["AfD", "CDU/CSU", "LINKE"]   
 results_saddle = []
 
 if saddle_targets:
