@@ -1,5 +1,6 @@
 import pandas as pd 
 import numpy as np
+import warnings
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import data_preprocessing.data_loading as dl
 CONFIG_PATH = "data_preprocessing/configs.json"
@@ -196,15 +197,15 @@ def get_valence_from_gesis(politicians: dict) -> pd.DataFrame:
     # create two new columns for the name of the politicians and the party
     df["politician"] = df.index
     df["politician"] = df["politician"].apply(lambda s: s.split(":")[-1])
-    df["party"] = df["politician"].apply(lambda s: politicians[s])
+    df["Party_Name"] = df["politician"].apply(lambda s: politicians[s])
     df.index = np.arange(len(df))
 
     # if there are more politicians in politicians than in the actual survey
-    if len(politicians) != len(df):
-        missing_politicians = [politician for politician in politicians if politician not in list(df["politician"])]
-        raise KeyError(f"The politicians {missing_politicians} were not found in survey.")
+    missing_politicians = [pol for pol in politicians if pol not in df["politician"].tolist()]
+    if missing_politicians:
+        warnings.warn(f"The politicians {missing_politicians} were not found in survey and will be skipped.", UserWarning)
     
     # if there are multiple top candiates for one party, we take the mean
-    df = df.groupby("party", as_index=False).agg({"politician": ' '.join, "valence": "mean"})
+    df = df.groupby("Party_Name", as_index=False).agg({"politician": ' '.join, "valence": "mean"})
 
     return df
