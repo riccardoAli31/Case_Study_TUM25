@@ -1,10 +1,10 @@
 TODO
-- Automate functions to run without specifying manually which parties are in saddle points/local min
 - Add directions in axis labels of the plot (i.e. Democracy ---> Authoritarian-Democratic)
 - Gaussian KDE with initial and equilibrium positions 
 
 - Check voter data from previous years back to 2007
 - Run the model for past years and compare results
+    - LINKE not present for 2024 external valences
 
 - Implement the DS model
 
