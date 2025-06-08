@@ -3,6 +3,7 @@ import numpy as np
 from numpy.linalg import eig, eigh
 from scipy.optimize import minimize
 import plotly.graph_objects as go
+import plotly.express as px
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
 
@@ -59,17 +60,48 @@ def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataF
     lambda_df = pd.DataFrame({
         "class_index": np.arange(p),
         "Party_Name":   party_names.values,
-        "Valence":      lambda_vals
-    }).sort_values("Valence", ascending=False).reset_index(drop=True)
+        "valence":      lambda_vals
+    }).sort_values("valence", ascending=False).reset_index(drop=True)
 
     return lambda_vals, lambda_df
 
 
-def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
-                                    x_var: str, y_var: str) -> pd.DataFrame:
+def get_external_valences(lambda_df_logit):
+    # extract the politician names
+    party_map = {"chrupalla": "AfD", 
+               "weidel": "AfD", 
+               "soeder": "CDU/CSU", 
+               "wuest": "CDU/CSU", 
+               "merz": "CDU/CSU", 
+               "laschet": "CDU/CSU", 
+               "scholz": "SPD", 
+               "klingbeil": "SPD",
+               "esken": "SPD",
+               "pistorius": "SPD",
+               "baerbock": "90/Greens", 
+               "habeck": "90/Greens", 
+               "lindner": "FDP", 
+               "wissler": "LINKE", 
+               "bartsch": "LINKE",
+               "wagenknecht": "BSW"}
+   
+    # fetch the external valences
+    valences = dp.get_valence_from_gesis(party_map)  
 
-    # 1) Number of parties (p) and voter‐covariance V*
-    p = len(lambda_values)
+    class_index_map = dict(zip(lambda_df_logit["Party_Name"], lambda_df_logit["class_index"]))
+    max_idx       = lambda_df_logit["class_index"].max()
+    default_idx   = max_idx + 1  # for any new party
+    # Attach a class_index column to the external DF
+    valences["class_index"] = valences["Party_Name"].map(lambda p: class_index_map.get(p, default_idx))
+
+    # Re‐index and sort 
+    valences = (valences.set_index("class_index").sort_index().reset_index() )
+
+    return valences["valence"].values, valences
+
+
+def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, party_centered: pd.DataFrame, lambda_df: pd.DataFrame,
+                                    x_var: str, y_var: str) -> pd.DataFrame:
 
     # 1a) Compute steady‐state shares rho_j = exp(lambda_j) / sum_k exp(lambda_k)
     expL = np.exp(lambda_values)
@@ -92,9 +124,11 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
     rows = []
 
     # 3) Iterate over each party j = 0..p-1
-    for j in range(p):
+    for i, row in lambda_df.reset_index(drop=True).iterrows():
+        class_idx  = int(row["class_index"])   
+        party_name = row["Party_Name"]
         # 3a) Compute A_j = beta * (1 - 2*rho_j)
-        Aj = beta * (1 - 2 * rho[j])
+        Aj = beta * (1 - 2 * rho[i])
 
         # 3b) Build C_j = 2 * A_j * Vstar - I2
         Cj = 2 * Aj * Vstar - I2
@@ -120,12 +154,9 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
             # If both > 0, that is a local minimum at the origin (rare in LSNE context)
             action = "Both μ>0 → origin is local minimum (move away in any linear combo)."
 
-        # 3e) Grab the party name from party_centered
-        party_name = party_centered.loc[j, "Party_Name"]
-
-        # 3f) Append a result row
+        # 3e) Append a result row
         rows.append({
-            "class_index": j,
+            "class_index": i,
             "Party_Name":  party_name,
             "mu_1":        float(np.round(mu1, 6)),
             "mu_2":        float(np.round(mu2, 6)),
@@ -141,7 +172,7 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
     return result_df
 
 
-def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
+def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_df: pd.DataFrame, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
                                             beta: float, x_var: str, y_var: str, target_party_name: str) -> tuple[np.ndarray, float, float]:
     """
     Given:
@@ -160,7 +191,9 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, voter_ce
     # 1) Find the integer index j_idx of the target party
     if target_party_name not in party_centered["Party_Name"].values:
         raise ValueError(f"Party '{target_party_name}' not found in party_centered['Party_Name'].")
-    j_idx = int(party_centered.index[party_centered["Party_Name"] == target_party_name][0])
+    
+    row = lambda_df[lambda_df["Party_Name"] == target_party_name].iloc[0]    
+    j_idx = lambda_df.index.get_loc(row.name)
 
     # 2) Recover Y (n×2) and Z (p×2) from the centered DataFrames:
     Y = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)   # shape = (n,2)
@@ -421,116 +454,123 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, voter
     return best_z, best_share, best_info
 
 
-def plot_optima(voter_centered, party_centered, directions: dict[str, tuple[np.ndarray, float]], optima: dict[str, np.ndarray],
-                x_var: str, y_var: str) -> go.Figure:
-   
-    # 1) Extract voter coordinates
-    xi = voter_centered[f"{x_var} Centered"].to_numpy()
-    yi = voter_centered[f"{y_var} Centered"].to_numpy()
-
-    # 2) Extract all party coordinates + names
-    zx_all = party_centered[f"{x_var} Centered"].to_numpy()
-    zy_all = party_centered[f"{y_var} Centered"].to_numpy()
-    names_all = party_centered["Party_Name"].tolist()
-
-    # 3) Build a mapping from party_name → (current_x, current_y)
+def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium_results_df: pd.DataFrame,
+                               voter_centered: pd.DataFrame, party_centered: pd.DataFrame, x_var: str, y_var: str):
+    """
+    all_party_movements_df: must have columns ['Model','Party_Name','action']
+    equilibrium_results_df: must have ['Model','party','type','direction_x','direction_y','t_opt','optimal_position']
+    voter_centered:      DataFrame with ['Party_Name', f"{x_var} Centered", f"{y_var} Centered"]
+    party_centered:      same structure, but one row per party
+    x_var,y_var:         base variable names (e.g. "Democracy","Environmental Protection")
+    """
+    # 1) restrict to the parties in your movements DF
+    parties = all_party_movements_df["Party_Name"].unique()
+    vc = voter_centered[ voter_centered["Party_Name"].isin(parties) ]
+    pc = party_centered[ party_centered["Party_Name"].isin(parties) ]
+    
+    # 2) build a quick lookup of each party's current coords
     party_coords = {
-        row["Party_Name"]: np.array([row[f"{x_var} Centered"], row[f"{y_var} Centered"]])
-        for _, row in party_centered.iterrows()}
-
-    # 4) Initialize the figure
-    fig = go.Figure()
-
-    # 4a) Plot all voters (light gray)
-    fig.add_trace(go.Scatter(
-        x = xi,
-        y = yi,
-        mode   = "markers",
-        marker = dict(size=4, color="lightgray"),
-        name   = "Voters"
-    ))
-
-    # 4b) Plot all current party centroids (blue + text)
-    fig.add_trace(go.Scatter(
-        x = zx_all,
-        y = zy_all,
-        mode   = "markers+text",
-        marker = dict(size=10, color="blue"),
-        text = names_all,
-        textposition = "top center",
-        name = "Party Centroids"
-    ))
-
-    # 5) For each party in `directions`, draw the two‐sided line + green dot
-    line_length = 2.0
-
-    if directions is not None:
-        for party_name, (v_pos, t_opt) in directions.items():
-            if party_name not in party_coords:
-                raise ValueError(f"Party '{party_name}' not found in party_centered.")
-            z_current = party_coords[party_name]   # length‐2 array
-
-            # 5a) Two‐sided red line endpoints
-            x_start = z_current[0] - line_length * v_pos[0]
-            y_start = z_current[1] - line_length * v_pos[1]
-            x_end   = z_current[0] + line_length * v_pos[0]
-            y_end   = z_current[1] + line_length * v_pos[1]
-
-            # Plot the red line
-            fig.add_trace(go.Scatter(
-                x = [x_start, x_end],
-                y = [y_start, y_end],
-                mode   = "lines",
-                line   = dict(color="red", width=2),
-                name   = f"{party_name} Direction"
-            ))
-
-            # 5b) Green dot at the optimal point: z_current + t_opt * v_pos
-            z_opt_pt = z_current + t_opt * v_pos
-            fig.add_trace(go.Scatter(
-                x = [z_opt_pt[0]],
-                y = [z_opt_pt[1]],
-                mode   = "markers+text",
-                marker = dict(size=12, color="green"),
-                text   = [f"Optimal {party_name}\n(t={t_opt:.2f})"],
-                textposition = "bottom right",
-                name   = f"{party_name} Opt (1D)"))
-    else:
-        pass
-
-    # 6) For each party in `optima`, draw a star at z_opt
-    star_colors = ["purple", "darkcyan", "magenta", "orange", "gold", "teal", "crimson"]
-    color_index = 0
-
-    if optima is not None:
-        for party_name, z_opt in optima.items():
-            if not isinstance(z_opt, (list, tuple, np.ndarray)) or len(z_opt) != 2:
-                raise ValueError(f"Optimal location for '{party_name}' must be a length‐2 array.")
-            if party_name not in party_coords:
-                pass
-
-            # Choose color
-            color = star_colors[color_index % len(star_colors)]
-            color_index += 1
-
-            fig.add_trace(go.Scatter(
-                x = [z_opt[0]],
-                y = [z_opt[1]],
-                mode   = "markers+text",
-                marker = dict(size=14, symbol="star", color=color),
-                text   = [f"Optimal {party_name}"],
-                textposition = "top left",
-                name   = f"{party_name} Opt (2D)"
-            ))
-    else:
-        pass
-
-    # 7) Final layout tweaks
-    fig.update_layout(
-        title       = "Centered Voter Cloud & Party Optima",
-        xaxis_title = f"{x_var} (Centered)",
-        yaxis_title = f"{y_var} (Centered)",
-        showlegend  = True
+        r["Party_Name"]: np.array([r[f"{x_var} Centered"], r[f"{y_var} Centered"]])
+        for _, r in pc.iterrows()
+    }
+    
+    # 3) assemble one row per (Model,Party)
+    rows = []
+    for _, mrow in all_party_movements_df.iterrows():
+        model = mrow["Model"]
+        party = mrow["Party_Name"]
+        action = mrow["action"].lower()
+        
+        # decide type
+        if "local max" in action:
+            typ = "no_move"
+        elif "saddle" in action:
+            typ = "saddle"
+        elif "local min" in action:
+            typ = "local_min"
+        else:
+            typ = "no_move"
+        
+        origin = party_coords[party]
+        
+        # compute optimum
+        if typ == "saddle":
+            er = equilibrium_results_df.query(
+                "Model==@model and party==@party and type=='saddle'"
+            ).iloc[0]
+            v     = np.array([er.direction_x, er.direction_y])
+            z_opt = origin + er.t_opt * v
+        
+        elif typ == "local_min":
+            er    = equilibrium_results_df.query(
+                "Model==@model and party==@party and type=='local_min'"
+            ).iloc[0]
+            z_opt = np.array(er.optimal_position)
+        
+        else:  # no_move
+            z_opt = origin
+        
+        rows.append({
+            "Model": model,
+            "Party": party,
+            "Type":  typ,
+            "x_opt": float(z_opt[0]),
+            "y_opt": float(z_opt[1])
+        })
+    
+    opt_df = pd.DataFrame(rows)
+    
+    # 4) Plotly‐Express scatter
+    fig = px.scatter(
+        opt_df,
+        x="x_opt", y="y_opt",
+        color="Model",
+        symbol="Type",
+        symbol_map={
+            "saddle":    "triangle-up",
+            "local_min": "star",
+            "no_move":   "circle"
+        },
+        text="Party",
+        title=f"Equilibrium Positions: {x_var} vs {y_var}",
+        labels={
+            "x_opt": f"{x_var} (Centered)",
+            "y_opt": f"{y_var} (Centered)"
+        }
     )
-
+    
+    # make symbols bigger
+    fig.update_traces(marker_size=16)
+    
+    # 5) add voter cloud (light gray, no legend)
+    voter_scatter = px.scatter(
+        vc,
+        x=f"{x_var} Centered",
+        y=f"{y_var} Centered"
+    ).update_traces(
+        marker=dict(size=4, color="lightgray"),
+        showlegend=False
+    ).data[0]
+    fig.add_trace(voter_scatter)
+    
+    # 6) add current party centroids (black) + labels
+    cent = pc.copy()
+    cent["x0"] = cent[f"{x_var} Centered"]
+    cent["y0"] = cent[f"{y_var} Centered"]
+    cent_scatter = px.scatter(
+        cent,
+        x="x0", y="y0",
+        text="Party_Name"
+    ).update_traces(
+        marker=dict(size=12, color="black"),
+        textposition="top center",
+        showlegend=False
+    ).data[0]
+    fig.add_trace(cent_scatter)
+    
+    # 7) final layout
+    fig.update_layout(
+        legend_title="Model & Type"
+    )
+    
     return fig
