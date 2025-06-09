@@ -4,11 +4,12 @@ from numpy.linalg import eig, eigh
 import data_preprocessing.data_preprocess as dp
 import pipeline_helper_functions.schofield_model_helper as sm
 
-x_var="Democracy"
-y_var="Welfare State"
+x_var = "Democracy"
+y_var = "Welfare State"
+year  = "2021"
 
-# ------------------------------------------------------------- Data Preprocessing ---------------------------------------------------------------------------------------
-party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
+# ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
+party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=year)
 party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
                             columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
 party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
@@ -16,7 +17,7 @@ party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scale
 # ------------------------------------------- Valences from Multinomial Logistic Regression and from DATA  ------------------------------------------------------------------------
 lambda_values_logit, lambda_df_logit = sm.fit_multinomial_logit(voter_centered=voter_centered, party_centered=party_centered, x_var=x_var, y_var=y_var)
 
-lambda_values_external, lambda_df_external = sm.get_external_valences(lambda_df_logit=lambda_df_logit)
+lambda_values_external, lambda_df_external = sm.get_external_valences(lambda_df_logit=lambda_df_logit, year=year)
 
 # common party indices between two models
 common_idx = sorted(set(lambda_df_logit["class_index"]) & set(lambda_df_external["class_index"]))
@@ -31,7 +32,7 @@ lambda_df_external = (lambda_df_external.loc[lambda_df_external["class_index"].i
 lambda_values_logit    = lambda_df_logit["valence"].to_numpy()
 lambda_values_external = lambda_df_external["valence"].to_numpy()
 
-beta = 0.6
+beta = 0.8
 
 # --------------------------------------------------------- Equilibrium conditions Check ---------------------------------------------------------------------------------------
 models = [("logit", lambda_values_logit, lambda_df_logit), ("external", lambda_values_external, lambda_df_external)]
@@ -94,14 +95,13 @@ all_party_movements = []
 
 for model_name, lambda_values, lambda_df in models:
     print(model_name)
-    char_df = sm.compute_characteristic_matrices(
-        lambda_values=lambda_values,
-        beta=beta,
-        voter_centered=voter_centered,
-        party_centered=party_centered,
-        lambda_df=lambda_df,
-        x_var=x_var,
-        y_var=y_var)
+    char_df = sm.compute_characteristic_matrices(lambda_values=lambda_values,
+                                                beta=beta,
+                                                voter_centered=voter_centered,
+                                                party_centered=party_centered,
+                                                lambda_df=lambda_df,
+                                                x_var=x_var,
+                                                y_var=y_var)
     
     # tag it with which model produced it:
     char_df = char_df.copy()
@@ -128,6 +128,12 @@ equilibrium_results = []
 for model, mov_df in all_party_movements_df.groupby("Model"):
     λ_vals = lambda_map[model]
     λ_df = lambda_map_df[model]
+    parties = λ_df["Party_Name"].tolist()
+
+    party_sub = party_centered.set_index("Party_Name").loc[parties].reset_index()
+    # Re-align your λ_vals to exactly that same order:
+    λ_series    = pd.Series(λ_vals, index=λ_df["Party_Name"])
+    lambda_aligned = λ_series.loc[parties].to_numpy()
     
     # automatically pick out which parties need saddle‐point moves
     saddle_targets = mov_df.loc[mov_df["action"].str.contains("Saddle", case=False), "Party_Name"].tolist()
@@ -138,10 +144,10 @@ for model, mov_df in all_party_movements_df.groupby("Model"):
     # --- compute saddle results ---
     for party in saddle_targets:
         v_pos, t_opt, share_opt = sm.compute_optimal_movement_saddle_position(
-            lambda_values     = λ_vals,
-            lambda_df         = λ_df,  
-            voter_centered    = voter_centered[voter_centered['Party_Name'].isin(λ_df["Party_Name"].unique())],
-            party_centered    = party_centered[party_centered['Party_Name'].isin(λ_df["Party_Name"].unique())],
+            lambda_values     = lambda_aligned,
+            lambda_df         = λ_df.loc[λ_df["Party_Name"].isin(parties)],
+            voter_centered    = voter_centered,   
+            party_centered    = party_sub,         
             beta              = beta,
             x_var             = x_var,
             y_var             = y_var,
@@ -158,9 +164,10 @@ for model, mov_df in all_party_movements_df.groupby("Model"):
     # --- compute local‐min results ---
     for party in local_min_targets:
         z_opt, share_opt, info = sm.compute_optimal_movement_local_min_position(
-            lambda_values     = λ_vals,
-            voter_centered    = voter_centered[voter_centered['Party_Name'].isin(λ_df["Party_Name"].unique())],
-            party_centered    = party_centered[party_centered['Party_Name'].isin(λ_df["Party_Name"].unique())],
+            lambda_values     = lambda_aligned,
+            lambda_df         = λ_df.loc[λ_df["Party_Name"].isin(parties)],
+            voter_centered    = voter_centered,
+            party_centered    = party_sub,
             target_party_name = party,
             x_var             = x_var,
             y_var             = y_var)
@@ -169,12 +176,10 @@ for model, mov_df in all_party_movements_df.groupby("Model"):
             "party":           party,
             "type":            "local_min",
             "optimal_position": z_opt,
-            "share_opt":       float(share_opt)
-        })
-
+            "share_opt":       float(share_opt)})
+        
 # put it all in one DataFrame
 equilibrium_results_df = pd.DataFrame(equilibrium_results)
-
 print(equilibrium_results_df)
 
 # --------------------------------------------------- Plot data cloud and equilibrium positions -----------------------------------------------------------------------------------
