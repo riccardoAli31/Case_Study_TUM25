@@ -1,19 +1,18 @@
 TODO
+- Implement opinion dynamics model
+
 - Add directions in axis labels of the plot (i.e. Democracy ---> Authoritarian-Democratic)
 - Gaussian KDE with initial and equilibrium positions 
 
-- Check voter data from previous years back to 2007
+- Load voter data from previous years back to 2007
+- Load party manifesto data from previous years also
+
 - Run the model for past years and compare results
     - LINKE not present for 2024 external valences
 
-- Implement the DS model
-
-- How to merge the two approaches?
 
 FURTHER IMPROVEMENTS:
-
-- Check how it evolved for years in the past
-- Do the same for other countries
-- Introduce new variables 
+- Run model for other countries
+- Introduce new variables to utility function (u_ij = lambda_j - beta*||x_i-z_j||**2 + constant*sociodemographic_var + constant_2*external_valence)
     - sociodemographic variables
     - external valences
