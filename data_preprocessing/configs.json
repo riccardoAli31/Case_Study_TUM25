@@ -163,7 +163,7 @@
     "kp27_170": "how likely to vote next national election",
     "kp27_190aa": "who did you vote for:first vote(a)",
     "kp27_190ab": "who did you vote for:first vote(b)",
-    "kp27_190ba": "who did you vote for:second vote(a)", 
+    "kp27_190ba": "who did you vote for:second vote", 
     "kp27_190bb": "who did you vote for:second vote(b)",
     "kp27_1070c": "more taxes, more social welfare:spd",
     "kp27_1070a": "more taxes, more social welfare:cdu", 
@@ -315,7 +315,7 @@
     "kp27_910j": "how would you like government of:cdu,csu,fdp,afd",
     "kp27_910k": "how would you like government of:cdu,csu,afd",
     "kp27_911": "how would you like if afd is in government",
-    "kp27_2090a": "do you incline towards a party, if so which one(a)",
+    "kp27_2090a": "do you incline towards a party, if so which one",
     "kp27_2090b": "do you incline towards a party, if so which one(b)",
     "kp27_2100": "how strongly do you incline towards this party", 
     "kp27_2095a": "are there any other parties you incline towards(a)",
@@ -417,7 +417,8 @@
     "kp20_2095a": "are there any other parties you incline towards(a)", 
     "kp20_2095b": "are there any other parties you incline towards(b)", 
     "kp20_2101": "how strongly do you incline towards this other party", 
-    "kp20_4240": "how much did you like this survey"}, 
+    "kp20_4240": "how much did you like this survey"
+}, 
 
 "common_items": {
     "Foreign Special Relationships: Positive": [
@@ -465,7 +466,6 @@
         "more social service, more taxes",
         "importance:more social service, more taxes",
         "how unjust is german society",
-
         "more taxes, more social welfare:voter","rich people should pay more taxes", 
         "in times of high inflation, state should help citizens financially","state should fix price limits for energy and basic foods"],
     "Education Expansion": [
@@ -777,8 +777,9 @@
 "party_leaders": {
     "2009": {"steinmeier": "SPD", "merkel": "CDU/CSU", "westerwelle": "FDP", "kuenast": "90/Greens", "gysi": "LINKE", "lafontaine": "LINKE"},
     "2013": {"merkel": "CDU/CSU", "steinbrueck": "SPD", "bruederle": "FDP", "gysi": "LINKE", "trittin": "90/Greens"},
-    "2017": {"merkel": "CDU/CSU", "schulz": "SPD", "wagenknecht": "LINKE", "bartsch": "LINKE", "goering-eckardt": "90/GReens", "oezdemir": "90/Greens", "lindner": "FDP", "gauland": "AfD"},
-    "2021": {"laschet": "CDU/CSU", "scholz": "SPD", "weidel": "AfD", "lindner": "FDP", "bartsch": "LINKE", "wissler": "LINKE", "baerbock": "90/Greens", "habeck": "90/Greens"}
+    "2017": {"merkel": "CDU/CSU", "schulz": "SPD", "wagenknecht": "LINKE", "bartsch": "LINKE", "goering-eckardt": "90/Greens", "oezdemir": "90/Greens", "lindner": "FDP", "gauland": "AfD"},
+    "2021": {"laschet": "CDU/CSU", "scholz": "SPD", "weidel": "AfD", "lindner": "FDP", "bartsch": "LINKE", "wissler": "LINKE", "baerbock": "90/Greens", "habeck": "90/Greens"},
+    "2024": {"merz": "CDU/CSU", "soeder": "CDU/CSU", "scholz": "SPD", "weidel": "AfD", "lindner": "FDP", "wagenknecht": "BSW", "habeck": "90/Greens", "baerbock": "90/Greens"}
 }
 
 }
