@@ -1,25 +1,17 @@
 TODO
 - Implement opinion dynamics model
 
-- Add directions in axis labels of the plot (i.e. Democracy ---> Authoritarian-Democratic)
+- Add arrows in axis labels of the plot (i.e. Democracy ---> Authoritarian-Democratic)
 - Gaussian KDE with initial and equilibrium positions 
 
-- Load voter data from previous years back to 2007
-    - Voter data twice for 2021
-    - Make the year of data used a parameter of loading functions 
-    - use same year as voter data for party manifestos as well
-
 - Run the model for past years and compare results
-    - LINKE not present for 2024 external valences
+    - beta_values list for each year 
 
-- Implement the DS model
+- Remove old 2021 data and add the new source 2024 data
 
-- Arrows for plots to better understand it
 - Survey for students
-- cut the variables that we flip maybe
-- cut valence question from above because encoding
-
-- How to merge the two approaches?
+- Cut the variables that we flip maybe
+- Cut valence question from above because of encoding
 
 FURTHER IMPROVEMENTS:
 - Run model for other countries
