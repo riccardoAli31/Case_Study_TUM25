@@ -67,12 +67,12 @@ def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataF
     return lambda_vals, lambda_df
 
 
-def get_external_valences(lambda_df_logit):
+def get_external_valences(lambda_df_logit, year):
     # extract the politician names
-    party_map = dl.load_party_leaders()
+    party_map = dl.load_party_leaders(year=year)
    
     # fetch the external valences
-    valences = dp.get_valence_from_gesis(party_map)  
+    valences = dp.get_valence_from_gesis(politicians=party_map, year=year)  
 
     class_index_map = dict(zip(lambda_df_logit["Party_Name"], lambda_df_logit["class_index"]))
     max_idx       = lambda_df_logit["class_index"].max()
@@ -263,8 +263,8 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
     return v_pos, t_opt, share_opt
 
 
-def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, voter_centered: pd.DataFrame, party_centered: pd.DataFrame, 
-                            target_party_name: str, x_var: str, y_var: str):
+def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambda_df: pd.DataFrame, voter_centered: pd.DataFrame, party_centered: pd.DataFrame, 
+                                                target_party_name: str, x_var: str, y_var: str):
     """
     Perform a full 2-D optimization for party `target_party_name` to maximize its average MNL vote share.
     This function does the following steps:
@@ -293,9 +293,10 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, voter
 
     if target_party_name not in party_centered["Party_Name"].values:
         raise ValueError(f"Party '{target_party_name}' not found in party_centered.")
-
-    j_idx = int(party_centered.index[party_centered["Party_Name"] == target_party_name][0])
-    z0 = Z_all[j_idx].copy()  # original location of the target party
+    
+    row = lambda_df[lambda_df["Party_Name"] == target_party_name].iloc[0]    
+    j_idx = lambda_df.index.get_loc(row.name)
+    z0 = Z_all[j_idx].copy()  
 
     n, p = Y.shape[0], Z_all.shape[0]
 
