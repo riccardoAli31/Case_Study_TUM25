@@ -3,7 +3,7 @@ import json
 import pandas as pd 
 import numpy as np
 CONFIG_PATH = "data_preprocessing/configs.json"
-VOTER_DATA_FILE_NAME = "2021.sav"
+VOTER_DATA_FILE_NAME = "voters_2021.sav"
 
 
 def load_common_variables_mapping(path: str) -> dict:
@@ -142,6 +142,12 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name: str=VOTE
     cols = list(mapping.values())
     df.drop(df.columns.difference(cols), axis=1, inplace=True)
 
+    cols_to_flip = [
+        "importance:more social service, more taxes", 
+        "not satisfied with democracy in germany"
+    ]
+    df = flip_columns(df, cols_to_flip)
+
     # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
     num_cols = df.select_dtypes(include=[np.number]).columns
     df[num_cols] = df[num_cols].mask(df[num_cols] < cutoff)
@@ -151,3 +157,19 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name: str=VOTE
     count = df.value_counts()
 
     return df, count
+
+
+def flip_columns(df: pd.DataFrame, columns: list) -> pd.DataFrame:
+
+    mappings = {}
+    for column in columns:
+        min = df[column].min()
+        max = df[column].max() 
+        before = np.arange(min, max+1)
+        after = np.flip(before)
+        mapping = dict(zip(before, after))
+        mappings[column] = mapping
+    
+    df = df.replace(mappings)
+
+    return df

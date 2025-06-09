@@ -17,7 +17,6 @@ party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scale
 lambda_values_logit, lambda_df_logit = sm.fit_multinomial_logit(voter_centered=voter_centered, party_centered=party_centered, x_var=x_var, y_var=y_var)
 
 lambda_values_external, lambda_df_external = sm.get_external_valences(lambda_df_logit=lambda_df_logit)
-print(lambda_df_external)
 
 # common party indices between two models
 common_idx = sorted(set(lambda_df_logit["class_index"]) & set(lambda_df_external["class_index"]))
