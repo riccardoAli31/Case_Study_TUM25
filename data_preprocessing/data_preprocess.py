@@ -34,14 +34,19 @@ def aggregate_who_voted_for(voter_df):
     return voter_df
 
 
-
-def get_raw_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folder', country: str = 'Germany') -> tuple[pd.DataFrame, pd.DataFrame]:
+def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 'data_folder', country: str = 'Germany') -> tuple[pd.DataFrame, pd.DataFrame]:
+    requested_year = year
     # --- Load and filter party data ---
     party_df = dl.get_party_positions_data(file_dir=file_dir, country=country)
-    party_week_filtered = party_df[party_df['Calendar_Week'] == party_df['Calendar_Week'].max()].reset_index(drop=True)
+    years_available = sorted(party_df['Year'].unique())
+    if year not in years_available:
+        fallback = years_available[-1]
+        warnings.warn(f"Requested year {year!r} not found in party data; "f"falling back to most recent year {fallback!r}.", UserWarning)
+        year = fallback
+    party_year_filtered = party_df[party_df['Year'] == year].reset_index(drop=True)
 
     # --- Load voter data ---
-    voter_df, _ = dl.get_gesis_data(path=file_dir)
+    voter_df, _ = dl.get_gesis_data(path=file_dir, year=requested_year)
 
     # # only keep common variables
     common_items_mapping = dl.load_common_variables_mapping(CONFIG_PATH)
@@ -74,7 +79,6 @@ def get_raw_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folde
         weights = np.ones(len(vars_to_agg)) / len(vars_to_agg)
         voter_df[dim] = voter_df[vars_to_agg].dot(weights)
 
-
     voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote', 'do you incline towards a party, if so which one', 
                         'how strongly do you incline towards this party']].copy()
 
@@ -97,7 +101,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, file_dir: str = 'data_folde
     name2idx = {name:i for i,name in enumerate(party_order)}
     voter_agg['party_choice'] = voter_agg['Party_Name'].map(name2idx).astype(int)
 
-    return party_week_filtered, voter_agg
+    return party_year_filtered, voter_agg
 
 
 def party_position_weighted(df, x_var, y_var, weight_manifesto=0.2, weight_voters_mean=0.8):
@@ -120,13 +124,13 @@ def party_position_weighted(df, x_var, y_var, weight_manifesto=0.2, weight_voter
     return df
 
 
-def get_scaled_party_voter_data(x_var: str, y_var: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def get_scaled_party_voter_data(x_var: str, y_var: str, year: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
-    party_week_filtered, voter_agg = get_raw_party_voter_data(x_var=x_var, y_var=y_var)
+    party_year_filtered, voter_agg = get_raw_party_voter_data(x_var=x_var, y_var=y_var, year=year)
 
     # --- Standardize all clouds ---
     vot_pts = voter_agg[[x_var, y_var]].copy()
-    party_pts = party_week_filtered[[x_var, y_var]].copy()
+    party_pts = party_year_filtered[[x_var, y_var]].copy()
 
     # Scale voter data independently
     voter_scaler = StandardScaler()
@@ -139,7 +143,7 @@ def get_scaled_party_voter_data(x_var: str, y_var: str) -> tuple[pd.DataFrame, p
     p_scaled = party_scaler.transform(party_pts)
 
     voter_df_scaled = voter_agg.copy()
-    party_df_scaled = party_week_filtered.copy()
+    party_df_scaled = party_year_filtered.copy()
     voter_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = v_scaled
     party_df_scaled[[f"{x_var} Scaled", f"{y_var} Scaled"]] = p_scaled
 
@@ -189,7 +193,7 @@ def center_party_voter_data(voter_df, party_df, x_var, y_var):
     return party_df, voter_df
 
 
-def get_valence_from_gesis(politicians: dict) -> pd.DataFrame:
+def get_valence_from_gesis(politicians: dict, year: str) -> pd.DataFrame:
     """Extract the valences of the parties given in *politicians* as df
 
     Parameters
@@ -207,7 +211,7 @@ def get_valence_from_gesis(politicians: dict) -> pd.DataFrame:
     KeyError
         if not all politicians were found in gesis data
     """
-    df, _ = dl.get_gesis_data()
+    df, _ = dl.get_gesis_data(year=year)
 
     politicians_names = tuple(politicians.keys())
     # filter df to only get the opinion columns, which always have the form
