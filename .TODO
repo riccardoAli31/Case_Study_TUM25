@@ -12,6 +12,14 @@ TODO
 - Run the model for past years and compare results
     - LINKE not present for 2024 external valences
 
+- Implement the DS model
+
+- Arrows for plots to better understand it
+- Survey for students
+- cut the variables that we flip maybe
+- cut valence question from above because encoding
+
+- How to merge the two approaches?
 
 FURTHER IMPROVEMENTS:
 - Run model for other countries
