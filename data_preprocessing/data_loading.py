@@ -138,7 +138,8 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, year: str = None) -
     cols = list(mapping.values())
     df.drop(df.columns.difference(cols), axis=1, inplace=True)
 
-    cols_to_flip = ["importance:more social service, more taxes", "not satisfied with democracy in germany"]
+    cols_to_flip_list = ["importance:more social service, more taxes", "not satisfied with democracy in germany"]
+    cols_to_flip = [c for c in cols_to_flip_list if c in df.columns]
     df = flip_columns(df, cols_to_flip)
 
     # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
