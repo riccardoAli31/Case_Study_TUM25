@@ -5,7 +5,7 @@ import data_preprocessing.data_preprocess as dp
 import pipeline_helper_functions.schofield_model_helper as sm
 
 x_var="Democracy"
-y_var="Environmental Protection"
+y_var="Welfare State"
 
 # ------------------------------------------------------------- Data Preprocessing ---------------------------------------------------------------------------------------
 party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var)
@@ -17,6 +17,7 @@ party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scale
 lambda_values_logit, lambda_df_logit = sm.fit_multinomial_logit(voter_centered=voter_centered, party_centered=party_centered, x_var=x_var, y_var=y_var)
 
 lambda_values_external, lambda_df_external = sm.get_external_valences(lambda_df_logit=lambda_df_logit)
+print(lambda_df_external)
 
 # common party indices between two models
 common_idx = sorted(set(lambda_df_logit["class_index"]) & set(lambda_df_external["class_index"]))

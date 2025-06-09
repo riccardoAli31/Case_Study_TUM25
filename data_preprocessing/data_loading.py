@@ -3,7 +3,7 @@ import json
 import pandas as pd 
 import numpy as np
 CONFIG_PATH = "data_preprocessing/configs.json"
-VOTER_DATA_FILE_NAME = "voter_dataset_2021.sav"
+VOTER_DATA_FILE_NAME = "2021.sav"
 
 
 def load_common_variables_mapping(path: str) -> dict:
@@ -76,19 +76,33 @@ def get_party_positions_data(file_dir, country, file_name='party_dataset.csv') -
     return df_filtered
 
 
-def load_gesis_mapping(fp: str) -> dict:
+def load_gesis_mapping(fp: str=CONFIG_PATH, file_name=VOTER_DATA_FILE_NAME) -> dict:
     """Load the mapping for column names of gesis data
     """
     with open(fp, "r") as f:
         cfg = json.load(f)
 
-    year = VOTER_DATA_FILE_NAME[-8:-4]
+    year = file_name[-8:-4]
 
     try:
         return cfg[f"voter_positions_{year}_mapping"]
     except KeyError:
         raise KeyError(f"'voter_positions_{year}_mapping' not found in {fp}")
+    
 
+def load_party_leaders(fp: str=CONFIG_PATH, file_name=VOTER_DATA_FILE_NAME) -> dict:
+    """Load the party leaders of that year to calculate valences
+    """
+    with open(fp, "r") as f:
+        cfg = json.load(f)
+
+    year = file_name[-8:-4]
+
+    try:
+        return cfg["party_leaders"][year]
+    except KeyError:
+        raise KeyError(f"no party leaders for {year} found in {fp}")
+    
 
 def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name: str=VOTER_DATA_FILE_NAME) -> tuple[pd.DataFrame, pd.Series]:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
@@ -120,12 +134,8 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, file_name: str=VOTE
 
     df = pd.read_spss(path=sav_path, convert_categoricals=False)
 
-    # drop all unfinished surveys
-    finished_survey_col = [col for col in list(df.columns) if col.endswith("dispcode")][0]
-    df = df.drop(df[df[finished_survey_col] == 22].index).reset_index(drop=True)
-
     # rename columns
-    mapping = load_gesis_mapping(CONFIG_PATH)
+    mapping = load_gesis_mapping(CONFIG_PATH, file_name)
     df.rename(mapping, inplace=True, axis=1)
 
     # drop all unneeded columns

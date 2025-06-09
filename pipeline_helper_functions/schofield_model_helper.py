@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
+import data_preprocessing.data_loading as dl
 
 
 def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataFrame, x_var:str, y_var:str) -> tuple[np.ndarray, pd.DataFrame]:
@@ -68,22 +69,7 @@ def fit_multinomial_logit(voter_centered: pd.DataFrame, party_centered: pd.DataF
 
 def get_external_valences(lambda_df_logit):
     # extract the politician names
-    party_map = {"chrupalla": "AfD", 
-               "weidel": "AfD", 
-               "soeder": "CDU/CSU", 
-               "wuest": "CDU/CSU", 
-               "merz": "CDU/CSU", 
-               "laschet": "CDU/CSU", 
-               "scholz": "SPD", 
-               "klingbeil": "SPD",
-               "esken": "SPD",
-               "pistorius": "SPD",
-               "baerbock": "90/Greens", 
-               "habeck": "90/Greens", 
-               "lindner": "FDP", 
-               "wissler": "LINKE", 
-               "bartsch": "LINKE",
-               "wagenknecht": "BSW"}
+    party_map = dl.load_party_leaders()
    
     # fetch the external valences
     valences = dp.get_valence_from_gesis(party_map)  
