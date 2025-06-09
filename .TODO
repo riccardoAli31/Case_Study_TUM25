@@ -5,7 +5,9 @@ TODO
 - Gaussian KDE with initial and equilibrium positions 
 
 - Load voter data from previous years back to 2007
-- Load party manifesto data from previous years also
+    - Voter data twice for 2021
+    - Make the year of data used a parameter of loading functions 
+    - use same year as voter data for party manifestos as well
 
 - Run the model for past years and compare results
     - LINKE not present for 2024 external valences
