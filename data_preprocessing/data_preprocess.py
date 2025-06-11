@@ -36,6 +36,7 @@ def aggregate_who_voted_for(voter_df):
 
 def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 'data_folder', country: str = 'Germany') -> tuple[pd.DataFrame, pd.DataFrame]:
     # --- Load and filter party data ---
+    requested_year = year
     party_df = dl.get_party_positions_data(file_dir=file_dir, country=country)
     years_available = sorted(party_df['Year'].unique())
     if year not in years_available:
@@ -45,7 +46,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
     party_year_filtered = party_df[party_df['Year'] == year].reset_index(drop=True)
 
     # --- Load voter data ---
-    voter_df = dl.get_gesis_data(path=file_dir, year=year)
+    voter_df = dl.get_gesis_data(path=file_dir, year=requested_year)
 
     # only keep common variables
     common_items_mapping = dl.load_common_variables_mapping(CONFIG_PATH)
