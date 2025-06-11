@@ -1,7 +1,6 @@
 TODO
 - Implement opinion dynamics model
 
-- Add arrows in axis labels of the plot (i.e. Democracy ---> Authoritarian-Democratic)
 - Gaussian KDE with initial and equilibrium positions 
 
 - Run the model for past years and compare results
