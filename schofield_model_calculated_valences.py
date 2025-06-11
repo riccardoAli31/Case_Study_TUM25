@@ -32,7 +32,7 @@ lambda_df_external = (lambda_df_external.loc[lambda_df_external["class_index"].i
 lambda_values_logit    = lambda_df_logit["valence"].to_numpy()
 lambda_values_external = lambda_df_external["valence"].to_numpy()
 
-beta = 0.8
+beta = 0.7
 
 # --------------------------------------------------------- Equilibrium conditions Check ---------------------------------------------------------------------------------------
 models = [("logit", lambda_values_logit, lambda_df_logit), ("external", lambda_values_external, lambda_df_external)]
@@ -190,6 +190,7 @@ fig = sm.plot_equilibrium_positions(
     voter_centered         = voter_centered,
     party_centered         = party_centered,
     x_var                  = x_var,
-    y_var                  = y_var
+    y_var                  = y_var,
+    year                   = year
 )
 fig.show()

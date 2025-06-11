@@ -442,7 +442,7 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
 
 
 def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium_results_df: pd.DataFrame,
-                               voter_centered: pd.DataFrame, party_centered: pd.DataFrame, x_var: str, y_var: str):
+                               voter_centered: pd.DataFrame, party_centered: pd.DataFrame, x_var: str, y_var: str, year:str):
     """
     all_party_movements_df: must have columns ['Model','Party_Name','action']
     equilibrium_results_df: must have ['Model','party','type','direction_x','direction_y','t_opt','optimal_position']
@@ -519,10 +519,10 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
             "no_move":   "circle"
         },
         text="Party",
-        title=f"Equilibrium Positions: {x_var} vs {y_var}",
+        title=f"Equilibrium Positions for feature space: {x_var} vs {y_var} in year {year}",
         labels={
             "x_opt": f"Immigration should be easier                                                                                                                                                                                                            Immigration should be more difficult",
-            "y_opt": f"Less welfare, less taxes                                                                         More welfare, more taxes"
+            "y_opt": f"Less social service                                                                                                                                                                                                                     More social service"
         }
     )
     
