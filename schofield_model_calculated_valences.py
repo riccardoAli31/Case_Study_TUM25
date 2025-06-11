@@ -4,7 +4,7 @@ from numpy.linalg import eig, eigh
 import data_preprocessing.data_preprocess as dp
 import pipeline_helper_functions.schofield_model_helper as sm
 
-x_var = "Democracy"
+x_var = "National Way of Life: Immigration: Negative"
 y_var = "Welfare State"
 year  = "2021"
 
