@@ -35,7 +35,6 @@ def aggregate_who_voted_for(voter_df):
 
 
 def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 'data_folder', country: str = 'Germany') -> tuple[pd.DataFrame, pd.DataFrame]:
-    requested_year = year
     # --- Load and filter party data ---
     party_df = dl.get_party_positions_data(file_dir=file_dir, country=country)
     years_available = sorted(party_df['Year'].unique())
@@ -46,9 +45,9 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
     party_year_filtered = party_df[party_df['Year'] == year].reset_index(drop=True)
 
     # --- Load voter data ---
-    voter_df = dl.get_gesis_data(path=file_dir, year=requested_year)
+    voter_df = dl.get_gesis_data(path=file_dir, year=year)
 
-    # # only keep common variables
+    # only keep common variables
     common_items_mapping = dl.load_common_variables_mapping(CONFIG_PATH)
 
     # --- Filter that mapping to what actually exists in this voter_df ---
@@ -67,7 +66,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
     policy_columns = set().union(*filtered_mapping.values())
     columns_to_keep = ["bundesland", "who did you vote for:second vote", "do you incline towards a party, if so which one", 
                     "how strongly do you incline towards this party"] + sorted(policy_columns)
-    voter_df = voter_df.loc[:, voter_df.columns.intersection(columns_to_keep)]
+    voter_df = voter_df[voter_df.columns.intersection(columns_to_keep)].copy()
 
     # Create aggregated features for the voters'data 
     # Since for one variable of the party's data, we have a few corresponding ones from the voters'data, we'll have to aggregate the voter's feature into one
@@ -200,6 +199,9 @@ def get_valence_from_gesis(politicians: dict, year: str) -> pd.DataFrame:
     ----------
     politicians : dict
         has the form {name1: party1, name2: party2,...}, e.g. {"soeder": "CSU", "habeck": "GREENS"}
+    year: str
+        the year for which to get the gesis data and the political leaders of that time
+        should be in ["2009", "2013", "2017", "2021"]
 
     Returns
     -------

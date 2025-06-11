@@ -95,9 +95,18 @@ def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff:
     ----------
     path : str
         path to the file
-    cutoff : int, optional
+    lower_cutoff : int, optional
         all items with value below this are replaced with NaN, by default -70
         no answer is often encoded with -71
+    upper_cutoff : int, optional
+        all items with value above this are replaced with NaN, by default 800
+        no answer is often encoded with -71
+    year : str, optional
+        the year for which data is to be loaded, by default None
+        should be in ["2009", "2013", "2017", "2021"]
+    fill : bool, optional
+        if np.nan values should be filled with median for numerics and 0 for other columns, by default True
+
     Returns
     -------
     pd.DataFrame
@@ -147,27 +156,6 @@ def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff:
     if fill:
         df[num_cols] = df[num_cols].fillna(df[num_cols].median())
         df = df.fillna(0)  
-
-    cols_to_flip_list = ["importance:more social service, more taxes", "not satisfied with democracy in germany"]
-    cols_to_flip = [c for c in cols_to_flip_list if c in df.columns]
-    df = flip_columns(df, cols_to_flip)
-
     
     return df
 
-
-def flip_columns(df: pd.DataFrame, columns: list) -> pd.DataFrame:
-    """Flips the values in the columns of the given dataframe, e.g.
-    [2,4,5,6,3,2,3,1,3,6] -> [5,3,2,1,4,5,4,6,4,1]"""
-    mappings = {}
-    for column in columns:
-        min = df[column].min()
-        max = df[column].max() 
-        before = np.arange(min, max+1)
-        after = np.flip(before)
-        mapping = dict(zip(before, after))
-        mappings[column] = mapping
-    
-    df = df.replace(mappings)
-
-    return df
