@@ -145,7 +145,7 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, year: str = None) -
     # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
     num_cols = df.select_dtypes(include=[np.number]).columns
     df[num_cols] = df[num_cols].mask(df[num_cols] < cutoff)
-    df = df.fillna(0)
+    df = df.fillna(df.median())
     # how often each answer was given
     count = df.value_counts()
     return df, count
