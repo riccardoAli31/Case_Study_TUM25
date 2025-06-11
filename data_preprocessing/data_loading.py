@@ -89,7 +89,7 @@ def load_party_leaders(fp: str=CONFIG_PATH, year: str = None) -> dict:
         raise KeyError(f"no party leaders for {year} found in {fp}")
     
 
-def get_gesis_data(path: str="data_folder", cutoff: int=-70, year: str = None) -> tuple[pd.DataFrame, pd.Series]:
+def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff: int=70, year: str = None, fill: bool=True) -> tuple[pd.DataFrame, pd.Series]:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
     Parameters
     ----------
@@ -129,30 +129,36 @@ def get_gesis_data(path: str="data_folder", cutoff: int=-70, year: str = None) -
         sav_path = os.path.join(path, VOTER_DATA_FILE_NAME)
     if not os.path.isfile(sav_path):
         raise FileNotFoundError(f"File not found: {sav_path!r}")
-    print(os.path.basename(sav_path))
+    
     df = pd.read_spss(path=sav_path, convert_categoricals=False)
+
     # rename columns
     mapping = load_gesis_mapping(CONFIG_PATH, os.path.basename(sav_path))
     df.rename(mapping, inplace=True, axis=1)
+    
     # drop all unneeded columns
     cols = list(mapping.values())
     df.drop(df.columns.difference(cols), axis=1, inplace=True)
+
+    # replace all values below/above cutoff with NaN (e.g. encoding for "no answer given")
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    df[num_cols] = df[num_cols].mask(df[num_cols] < lower_cutoff)
+    df[num_cols] = df[num_cols].mask(df[num_cols] > upper_cutoff)
+    if fill:
+        df[num_cols] = df[num_cols].fillna(df[num_cols].median())
+        df = df.fillna(0)  
 
     cols_to_flip_list = ["importance:more social service, more taxes", "not satisfied with democracy in germany"]
     cols_to_flip = [c for c in cols_to_flip_list if c in df.columns]
     df = flip_columns(df, cols_to_flip)
 
-    # replace all values below cutoff with NaN (e.g. encoding for "no answer given")
-    num_cols = df.select_dtypes(include=[np.number]).columns
-    df[num_cols] = df[num_cols].mask(df[num_cols] < cutoff)
-    df[num_cols] = df[num_cols].fillna(df[num_cols].median())
-    # how often each answer was given
-    count = df.value_counts()
-    return df, count
+    
+    return df
 
 
 def flip_columns(df: pd.DataFrame, columns: list) -> pd.DataFrame:
-
+    """Flips the values in the columns of the given dataframe, e.g.
+    [2,4,5,6,3,2,3,1,3,6] -> [5,3,2,1,4,5,4,6,4,1]"""
     mappings = {}
     for column in columns:
         min = df[column].min()
