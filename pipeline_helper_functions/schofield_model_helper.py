@@ -521,8 +521,8 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
         text="Party",
         title=f"Equilibrium Positions: {x_var} vs {y_var}",
         labels={
-            "x_opt": f"{x_var} (Centered)",
-            "y_opt": f"{y_var} (Centered)"
+            "x_opt": f"Authorian                                                                                                                                                                                                            Democratic",
+            "y_opt": f"Less welfare                                                                         More welfare"
         }
     )
     
