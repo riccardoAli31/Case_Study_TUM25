@@ -89,7 +89,7 @@ def load_party_leaders(fp: str=CONFIG_PATH, year: str = None) -> dict:
         raise KeyError(f"no party leaders for {year} found in {fp}")
     
 
-def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff: int=800, year: str = None, fill: bool=True) -> tuple[pd.DataFrame, pd.Series]:
+def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff: int=800, year: str = None, fill: bool=True) -> pd.DataFrame:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
     Parameters
     ----------
@@ -151,7 +151,6 @@ def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff:
     cols_to_flip_list = ["importance:more social service, more taxes", "not satisfied with democracy in germany"]
     cols_to_flip = [c for c in cols_to_flip_list if c in df.columns]
     df = flip_columns(df, cols_to_flip)
-
     
     return df
 

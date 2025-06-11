@@ -132,7 +132,7 @@
     "per416_1": "Anti-Growth Economy: Positive",
     "per416_2": "Sustainability: Positive", 
     "per601_1": "National Way of Life General: Positive",
-    "per601_2": "National Way of Life: Immigration: Negative", 
+    "per601_2": "Opposition to Immigration", 
     "per602_1": "National Way of Life General: Negative",
     "per602_2": "National Way of Life: Immigration: Positive", 
     "per605_1": "Law and Order: Positive",
@@ -443,7 +443,6 @@
         "big difference who is in power",
         "not satisfied with democracy in germany",
         "voting can make a big difference",
-
         "under certain circumstances a dictatorship is the better form of government",
         "how content with democracy in germany", 
         "the politicans in parliament have to follow the will of the people",
@@ -462,7 +461,7 @@
     "Environmental Protection": [
         "economy or fighting climate change:voter",
         "pro nuclear power"],
-    "National Way of Life: Immigration: Negative": [
+    "Opposition to Immigration": [
         "immigration foreigners more difficult"],
     "Welfare State": [
         "more social service, more taxes"],
