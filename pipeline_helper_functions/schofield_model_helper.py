@@ -448,13 +448,14 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
     equilibrium_results_df: must have ['Model','party','type','direction_x','direction_y','t_opt','optimal_position']
     voter_centered:      DataFrame with ['Party_Name', f"{x_var} Centered", f"{y_var} Centered"]
     party_centered:      same structure, but one row per party
-    x_var,y_var:         base variable names (e.g. "Democracy","Environmental Protection")
+    x_var, y_var:        base variable names (e.g. "Democracy","Environmental Protection")
+    year:                string or int for the title
     """
     # 1) restrict to the parties in your movements DF
     parties = all_party_movements_df["Party_Name"].unique()
-    vc = voter_centered[ voter_centered["Party_Name"].isin(parties) ]
-    pc = party_centered[ party_centered["Party_Name"].isin(parties) ]
-    
+    vc = voter_centered[voter_centered["Party_Name"].isin(parties)]
+    pc = party_centered[party_centered["Party_Name"].isin(parties)]
+
     # 2) build a quick lookup of each party's current coords
     party_coords = {
         r["Party_Name"]: np.array([r[f"{x_var} Centered"], r[f"{y_var} Centered"]])
@@ -522,7 +523,7 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
         title=f"Equilibrium Positions for feature space: {x_var} vs {y_var} in year {year}",
         labels={
             "x_opt": f"Immigration should be easier                                                                                                                                                                                                            Immigration should be more difficult",
-            "y_opt": f"Less social service                                                                                                                                                                                                                     More social service"
+            "y_opt": f"Less welfare                                                                               More welfare"
         }
     )
     
