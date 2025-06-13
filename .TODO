@@ -1,21 +1,14 @@
 TODO
-- Implement opinion dynamics model
-
-- Gaussian KDE with initial and equilibrium positions 
-
-- Run the model for past years and compare results
-    - beta_values list for each year 
+- Finish up opinion dynamics model
 
 - Remove old 2021 data and add the new source 2024 data
 
-- Cut the variables that we flip maybe?
 - Cut valence question from above because of encoding?
 
 - How to merge the schofield model and opinion dynamics?
 
-FURTHER IMPROVEMENTS:
 - Introduce new variables to utility function (u_ij = lambda_j - beta*||x_i-z_j||**2 + constant*sociodemographic_var + constant_2*external_valence)
     - sociodemographic variables
     - external valences
+    
 - Is it possible to account for the principles of the party rather than just maximizing votes?
-- Run model for other countries
