@@ -81,7 +81,7 @@ def get_external_valences(lambda_df_logit, year):
     valences["class_index"] = valences["Party_Name"].map(lambda p: class_index_map.get(p, default_idx))
 
     # Re‐index and sort 
-    valences = (valences.set_index("class_index").sort_index().reset_index() )
+    valences = (valences.set_index("class_index").sort_index().reset_index())
 
     return valences["valence"].values, valences
 

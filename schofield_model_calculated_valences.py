@@ -6,7 +6,7 @@ import pipeline_helper_functions.schofield_model_helper as sm
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year  = "2021"
+year  = "2025"
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
 party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=year)
@@ -194,3 +194,4 @@ fig = sm.plot_equilibrium_positions(
     year                   = year
 )
 fig.show()
+
