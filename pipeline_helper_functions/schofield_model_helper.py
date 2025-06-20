@@ -4,6 +4,8 @@ from numpy.linalg import eig, eigh
 from scipy.optimize import minimize
 import plotly.graph_objects as go
 import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
 import data_preprocessing.data_loading as dl
@@ -562,3 +564,166 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
     )
     
     return fig
+
+
+def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, party_centered,
+                                      x_var, y_var, model='external', figsize=(13, 13), levels=None):
+    """
+    Plot the voter density, party positions, and equilibrium points for a given model.
+
+    Parameters:
+    - equilibrium_results_df: DataFrame containing equilibrium results with columns ['Model', 'party', 'direction_x', 'direction_y', 't_opt']
+    - voter_centered: DataFrame with centered voter coordinates, containing f"{x_var} Centered" and f"{y_var} Centered"
+    - party_centered: DataFrame with centered party coordinates, containing ['Party_Name', f"{x_var} Centered", f"{y_var} Centered"]
+    - x_var: str, name of the x-axis variable (e.g., 'Immigration')
+    - y_var: str, name of the y-axis variable (e.g., 'Welfare')
+    - model: str, the model name to filter on (default 'external')
+    - figsize: tuple, size of the figure (default (13,13))
+    - levels: list of floats, contour levels (default [0.25, 0.5, 0.75, 0.95])
+
+    Returns:
+    - fig, ax: Matplotlib figure and axes objects
+    """
+    # Default contour levels
+    if levels is None:
+        levels = [0.25, 0.50, 0.75, 0.95]
+
+    # 1) Filter equilibrium results for the specified model
+    eq_df = equilibrium_results_df[equilibrium_results_df['Model'] == model]
+
+    # 2) Extract voter coordinates
+    x = voter_centered[f"{x_var} Centered"]
+    y = voter_centered[f"{y_var} Centered"]
+
+    # 3) Set up the plot
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # 4) Filled contours for voter density
+    sns.kdeplot(
+        x=x, y=y,
+        fill=True,
+        levels=levels,
+        thresh=0,
+        cut=2,
+        bw_adjust=1.3,
+        cmap='Greys',
+        alpha=0.6,
+        ax=ax
+    )
+
+    # 5) Contour outlines
+    sns.kdeplot(
+        x=x, y=y,
+        fill=False,
+        levels=levels,
+        thresh=0,
+        cut=2,
+        bw_adjust=1.3,
+        color='black',
+        linewidths=1,
+        linestyles='-'
+    , ax=ax)
+
+    # 6) Plot raw voters
+    ax.scatter(
+        x, y,
+        s=18, c='lightblue',
+        edgecolor='none',
+        alpha=0.6,
+        label='Voter',
+        zorder=1
+    )
+
+    # 7) Plot party positions
+    px = party_centered[f"{x_var} Centered"]
+    py = party_centered[f"{y_var} Centered"]
+    ax.scatter(
+        px, py,
+        s=200, c='red',
+        edgecolor='black', linewidth=1.5,
+        zorder=3,
+        label='Party'
+    )
+
+    # 8) Add party labels
+    for name, xi, yi in zip(party_centered['Party_Name'], px, py):
+        ax.text(
+            xi, yi, name,
+            ha='center', va='center',
+            color='white', fontweight='bold',
+            zorder=4
+        )
+
+    # 9) Crosshair and axis
+    ax.axhline(0, color='grey', lw=0.5)
+    ax.axvline(0, color='grey', lw=0.5)
+    ax.set_xlabel(f"{x_var}", fontsize=12.5, fontweight='bold')
+    ax.set_ylabel(f"{y_var}", fontsize=12.5, fontweight='bold')
+    ax.set_xlim(-2.5, 2.5)
+    ax.set_ylim(-2.5, 2.5)
+
+    # 10) Axis end-labels
+    ax.text(
+        0, -0.03,
+        f"{x_var} should be easier",
+        transform=ax.transAxes,
+        ha="left", va="top",
+        fontsize=11.5, fontstyle='italic'
+    )
+    ax.text(
+        1, -0.03,
+        f"{x_var} should be more difficult",
+        transform=ax.transAxes,
+        ha="right", va="top",
+        fontsize=11.5, fontstyle='italic'
+    )
+    ax.text(
+        -0.025, 0.88,
+        f"More {y_var.lower()}",
+        transform=ax.transAxes,
+        ha="right", va="top",
+        rotation=90,
+        fontsize=11.5, fontstyle='italic'
+    )
+    ax.text(
+        -0.025, 0.13,
+        f"Less {y_var.lower()}",
+        transform=ax.transAxes,
+        ha="right", va="bottom",
+        rotation=90,
+        fontsize=11.5, fontstyle='italic'
+    )
+
+    # 11) Title
+    ax.set_title(
+        "Maximizing Votes: How Parties Plot Their Way to Power",
+        fontsize=16,
+        fontweight='bold',
+        pad=25
+    )
+
+    # 12) Add equilibrium stars and labels
+    pc = party_centered.set_index('Party_Name')
+    for _, er in eq_df.iterrows():
+        party = er['party']
+        if party not in pc.index:
+            continue
+
+        origin = pc.loc[party, [f"{x_var} Centered", f"{y_var} Centered"]].values
+        v = np.array([er['direction_x'], er['direction_y']])
+        z_opt = origin + er['t_opt'] * v
+
+        ax.scatter(
+            z_opt[0], z_opt[1],
+            marker='*', s=250,
+            c='gold', edgecolor='black', linewidth=1.2,
+            zorder=5, label='_nolegend_'
+        )
+        ax.text(
+            z_opt[0], z_opt[1], f"{party}*",
+            ha='center', va='center',
+            fontsize=10, fontweight='bold', color='black', zorder=6
+        )
+
+    plt.tight_layout()
+    return fig, ax
