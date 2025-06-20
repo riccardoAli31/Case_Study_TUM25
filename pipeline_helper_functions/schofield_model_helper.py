@@ -84,8 +84,75 @@ def get_external_valences(lambda_df_logit, year):
 
     # Re‐index and sort 
     valences = (valences.set_index("class_index").sort_index().reset_index())
+    valences = valences.sort_values("valence", ascending=False).reset_index(drop=True)
 
     return valences["valence"].values, valences
+
+
+def get_external_valences_independent(year):
+    # extract the politician names
+    party_map = dl.load_party_leaders(year=year)
+    # fetch the external valences
+    valences = dp.get_valence_from_gesis(politicians=party_map, year=year)  
+    valences["class_index"] = np.arange(len(valences["Party_Name"].unique()))
+    # Re‐index and sort 
+    valences = (valences.set_index("class_index").sort_index().reset_index())
+    valences = valences.sort_values("valence", ascending=False).reset_index(drop=True)
+    return valences["valence"].values, valences
+
+
+def check_equilibrium_conditions(lambda_df, lambda_values, beta, voter_centered, x_var, y_var):
+    equilibrium_conditions = []
+
+    # 1) identify the low‐valence party
+    min_row = lambda_df.loc[lambda_df["valence"].idxmin()]
+    party0  = min_row["Party_Name"]
+    j0 = lambda_df.reset_index().query("valence == @lambda_df.valence.min()").index[0]
+
+    # 2) steady‐state shares ρ_j
+    expL = np.exp(lambda_values)
+    rho  = expL / expL.sum()
+
+    # 3) compute A_j = β(1–2ρ_j), then A₁ = A[j0]
+    A = beta * (1 - 2*rho)
+    A1 = A[j0]
+
+    # 4) build covariance matrix of the two centered dimensions
+    xi1 = voter_centered[f'{x_var} Centered'].values
+    xi2 = voter_centered[f'{y_var} Centered'].values
+    cov = np.cov(np.stack([xi1, xi2]), bias=True)
+
+    # 5) C₁ = 2·A₁·V* – I
+    C1 = 2 * A1 * cov - np.eye(2)
+
+    # 6) eigen‐decomposition
+    eigvals, eigvecs = eig(C1)
+
+    # 7) check necessary and sufficient conditions
+    nec = np.all(eigvals < 0)
+    nec_label = "satisfied" if not nec else "not satisfied"
+    nu2 = np.trace(cov)
+    c   = 2 * A1 * nu2
+    suf = (c < 1)
+    suf_label = "satisfied" if not nec else "not satisfied"
+
+    # 8) append a record with flattened entries
+    equilibrium_conditions.append({
+        "LowVal_Party": party0,
+        "Eigval_1": eigvals[0],
+        "Eigval_2": eigvals[1],
+        "Vec1_x": eigvecs[0,0],
+        "Vec1_y": eigvecs[1,0],
+        "Vec2_x": eigvecs[0,1],
+        "Vec2_y": eigvecs[1,1],
+        "Necessary_Condition": nec_label,
+        "Convergence_Coeff": c,
+        "Sufficient_Condition": suf_label
+    })
+
+    # build the equilibrium_conditions_df
+    equilibrium_conditions_df = pd.DataFrame(equilibrium_conditions)
+    return equilibrium_conditions_df
 
 
 def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, party_centered: pd.DataFrame, lambda_df: pd.DataFrame,
@@ -588,17 +655,14 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
     if levels is None:
         levels = [0.25, 0.50, 0.75, 0.95]
 
-    # 1) Filter equilibrium results for the specified model
-    eq_df = equilibrium_results_df[equilibrium_results_df['Model'] == model]
-
-    # 2) Extract voter coordinates
+    # Extract voter coordinates
     x = voter_centered[f"{x_var} Centered"]
     y = voter_centered[f"{y_var} Centered"]
 
-    # 3) Set up the plot
+    # Set up the plot
     fig, ax = plt.subplots(figsize=figsize)
 
-    # 4) Filled contours for voter density
+    # Filled contours for voter density
     sns.kdeplot(
         x=x, y=y,
         fill=True,
@@ -611,7 +675,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         ax=ax
     )
 
-    # 5) Contour outlines
+    # Contour outlines
     sns.kdeplot(
         x=x, y=y,
         fill=False,
@@ -624,7 +688,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         linestyles='-'
     , ax=ax)
 
-    # 6) Plot raw voters
+    # Plot raw voters
     ax.scatter(
         x, y,
         s=18, c='lightblue',
@@ -634,7 +698,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         zorder=1
     )
 
-    # 7) Plot party positions
+    # Plot party positions
     px = party_centered[f"{x_var} Centered"]
     py = party_centered[f"{y_var} Centered"]
     ax.scatter(
@@ -645,7 +709,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         label='Party'
     )
 
-    # 8) Add party labels
+    # Add party labels
     for name, xi, yi in zip(party_centered['Party_Name'], px, py):
         ax.text(
             xi, yi, name,
@@ -654,7 +718,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
             zorder=4
         )
 
-    # 9) Crosshair and axis
+    # Crosshair and axis
     ax.axhline(0, color='grey', lw=0.5)
     ax.axvline(0, color='grey', lw=0.5)
     ax.set_xlabel(f"{x_var}", fontsize=12.5, fontweight='bold')
@@ -662,7 +726,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
     ax.set_xlim(-2.5, 2.5)
     ax.set_ylim(-2.5, 2.5)
 
-    # 10) Axis end-labels
+    # Axis end-labels
     ax.text(
         0, -0.03,
         f"{x_var} should be easier",
@@ -694,7 +758,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         fontsize=11.5, fontstyle='italic'
     )
 
-    # 11) Title
+    # Title
     ax.set_title(
         "Maximizing Votes: How Parties Plot Their Way to Power",
         fontsize=16,
@@ -702,9 +766,9 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         pad=25
     )
 
-    # 12) Add equilibrium stars and labels
+    # Add equilibrium stars and labels
     pc = party_centered.set_index('Party_Name')
-    for _, er in eq_df.iterrows():
+    for _, er in equilibrium_results_df.iterrows():
         party = er['party']
         if party not in pc.index:
             continue
