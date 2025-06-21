@@ -2,7 +2,6 @@ TODO
 - Finish up opinion dynamics model - experiments with coefficients
 
 - Create a .py file for the opinion dynamics model to produce a new voter sample
-- Create a .py file for the external valences equilibrium model
 
 - Use the transformed voter sample to run equilbrium positions of parties
 

@@ -634,7 +634,7 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
 
 
 def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, party_centered,
-                                      x_var, y_var, model='external', figsize=(13, 13), levels=None):
+                                      x_var, y_var, year, model='external', figsize=(13, 13), levels=None):
     """
     Plot the voter density, party positions, and equilibrium points for a given model.
 
@@ -760,7 +760,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
 
     # Title
     ax.set_title(
-        "Maximizing Votes: How Parties Plot Their Way to Power",
+        f"Voter Density & Party Equilibrium Positions for year {year}",
         fontsize=16,
         fontweight='bold',
         pad=25
