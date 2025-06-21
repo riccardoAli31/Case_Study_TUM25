@@ -666,6 +666,6 @@
     "2017": {"merkel": "CDU/CSU", "schulz": "SPD", "wagenknecht": "LINKE", "bartsch": "LINKE", "goering-eckardt": "90/Greens", "oezdemir": "90/Greens", "lindner": "FDP", "gauland": "AfD"},
     "2021": {"laschet": "CDU/CSU", "scholz": "SPD", "weidel": "AfD", "lindner": "FDP", "bartsch": "LINKE", "wissler": "LINKE", "baerbock": "90/Greens", "habeck": "90/Greens"},
     "2024": {"merz": "CDU/CSU", "soeder": "CDU/CSU", "scholz": "SPD", "weidel": "AfD", "lindner": "FDP", "wagenknecht": "BSW", "habeck": "90/Greens", "baerbock": "90/Greens"},
-    "2025": {"merz": "CDU/CSU", "scholz": "SPD", "weidel:": "AfD", "lindner": "FDP", "wagenknecht": "BSW", "habeck": "90/Greens", "vanaken": "LINKE"}
+    "2025": {"merz": "CDU/CSU", "scholz": "SPD", "weidel": "AfD", "lindner": "FDP", "wagenknecht": "BSW", "habeck": "90/Greens", "vanaken": "LINKE"}
 }
 }

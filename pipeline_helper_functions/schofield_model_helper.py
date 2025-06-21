@@ -4,6 +4,8 @@ from numpy.linalg import eig, eigh
 from scipy.optimize import minimize
 import plotly.graph_objects as go
 import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.linear_model import LogisticRegression
 import data_preprocessing.data_preprocess as dp
 import data_preprocessing.data_loading as dl
@@ -81,9 +83,76 @@ def get_external_valences(lambda_df_logit, year):
     valences["class_index"] = valences["Party_Name"].map(lambda p: class_index_map.get(p, default_idx))
 
     # Re‐index and sort 
-    valences = (valences.set_index("class_index").sort_index().reset_index() )
+    valences = (valences.set_index("class_index").sort_index().reset_index())
+    valences = valences.sort_values("valence", ascending=False).reset_index(drop=True)
 
     return valences["valence"].values, valences
+
+
+def get_external_valences_independent(year):
+    # extract the politician names
+    party_map = dl.load_party_leaders(year=year)
+    # fetch the external valences
+    valences = dp.get_valence_from_gesis(politicians=party_map, year=year)  
+    valences["class_index"] = np.arange(len(valences["Party_Name"].unique()))
+    # Re‐index and sort 
+    valences = (valences.set_index("class_index").sort_index().reset_index())
+    valences = valences.sort_values("valence", ascending=False).reset_index(drop=True)
+    return valences["valence"].values, valences
+
+
+def check_equilibrium_conditions(lambda_df, lambda_values, beta, voter_centered, x_var, y_var):
+    equilibrium_conditions = []
+
+    # 1) identify the low‐valence party
+    min_row = lambda_df.loc[lambda_df["valence"].idxmin()]
+    party0  = min_row["Party_Name"]
+    j0 = lambda_df.reset_index().query("valence == @lambda_df.valence.min()").index[0]
+
+    # 2) steady‐state shares ρ_j
+    expL = np.exp(lambda_values)
+    rho  = expL / expL.sum()
+
+    # 3) compute A_j = β(1–2ρ_j), then A₁ = A[j0]
+    A = beta * (1 - 2*rho)
+    A1 = A[j0]
+
+    # 4) build covariance matrix of the two centered dimensions
+    xi1 = voter_centered[f'{x_var} Centered'].values
+    xi2 = voter_centered[f'{y_var} Centered'].values
+    cov = np.cov(np.stack([xi1, xi2]), bias=True)
+
+    # 5) C₁ = 2·A₁·V* – I
+    C1 = 2 * A1 * cov - np.eye(2)
+
+    # 6) eigen‐decomposition
+    eigvals, eigvecs = eig(C1)
+
+    # 7) check necessary and sufficient conditions
+    nec = np.all(eigvals < 0)
+    nec_label = "satisfied" if not nec else "not satisfied"
+    nu2 = np.trace(cov)
+    c   = 2 * A1 * nu2
+    suf = (c < 1)
+    suf_label = "satisfied" if not nec else "not satisfied"
+
+    # 8) append a record with flattened entries
+    equilibrium_conditions.append({
+        "LowVal_Party": party0,
+        "Eigval_1": eigvals[0],
+        "Eigval_2": eigvals[1],
+        "Vec1_x": eigvecs[0,0],
+        "Vec1_y": eigvecs[1,0],
+        "Vec2_x": eigvecs[0,1],
+        "Vec2_y": eigvecs[1,1],
+        "Necessary_Condition": nec_label,
+        "Convergence_Coeff": c,
+        "Sufficient_Condition": suf_label
+    })
+
+    # build the equilibrium_conditions_df
+    equilibrium_conditions_df = pd.DataFrame(equilibrium_conditions)
+    return equilibrium_conditions_df
 
 
 def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, party_centered: pd.DataFrame, lambda_df: pd.DataFrame,
@@ -562,3 +631,163 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
     )
     
     return fig
+
+
+def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, party_centered,
+                                      x_var, y_var, model='external', figsize=(13, 13), levels=None):
+    """
+    Plot the voter density, party positions, and equilibrium points for a given model.
+
+    Parameters:
+    - equilibrium_results_df: DataFrame containing equilibrium results with columns ['Model', 'party', 'direction_x', 'direction_y', 't_opt']
+    - voter_centered: DataFrame with centered voter coordinates, containing f"{x_var} Centered" and f"{y_var} Centered"
+    - party_centered: DataFrame with centered party coordinates, containing ['Party_Name', f"{x_var} Centered", f"{y_var} Centered"]
+    - x_var: str, name of the x-axis variable (e.g., 'Immigration')
+    - y_var: str, name of the y-axis variable (e.g., 'Welfare')
+    - model: str, the model name to filter on (default 'external')
+    - figsize: tuple, size of the figure (default (13,13))
+    - levels: list of floats, contour levels (default [0.25, 0.5, 0.75, 0.95])
+
+    Returns:
+    - fig, ax: Matplotlib figure and axes objects
+    """
+    # Default contour levels
+    if levels is None:
+        levels = [0.25, 0.50, 0.75, 0.95]
+
+    # Extract voter coordinates
+    x = voter_centered[f"{x_var} Centered"]
+    y = voter_centered[f"{y_var} Centered"]
+
+    # Set up the plot
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Filled contours for voter density
+    sns.kdeplot(
+        x=x, y=y,
+        fill=True,
+        levels=levels,
+        thresh=0,
+        cut=2,
+        bw_adjust=1.3,
+        cmap='Greys',
+        alpha=0.6,
+        ax=ax
+    )
+
+    # Contour outlines
+    sns.kdeplot(
+        x=x, y=y,
+        fill=False,
+        levels=levels,
+        thresh=0,
+        cut=2,
+        bw_adjust=1.3,
+        color='black',
+        linewidths=1,
+        linestyles='-'
+    , ax=ax)
+
+    # Plot raw voters
+    ax.scatter(
+        x, y,
+        s=18, c='lightblue',
+        edgecolor='none',
+        alpha=0.6,
+        label='Voter',
+        zorder=1
+    )
+
+    # Plot party positions
+    px = party_centered[f"{x_var} Centered"]
+    py = party_centered[f"{y_var} Centered"]
+    ax.scatter(
+        px, py,
+        s=200, c='red',
+        edgecolor='black', linewidth=1.5,
+        zorder=3,
+        label='Party'
+    )
+
+    # Add party labels
+    for name, xi, yi in zip(party_centered['Party_Name'], px, py):
+        ax.text(
+            xi, yi, name,
+            ha='center', va='center',
+            color='white', fontweight='bold',
+            zorder=4
+        )
+
+    # Crosshair and axis
+    ax.axhline(0, color='grey', lw=0.5)
+    ax.axvline(0, color='grey', lw=0.5)
+    ax.set_xlabel(f"{x_var}", fontsize=12.5, fontweight='bold')
+    ax.set_ylabel(f"{y_var}", fontsize=12.5, fontweight='bold')
+    ax.set_xlim(-2.5, 2.5)
+    ax.set_ylim(-2.5, 2.5)
+
+    # Axis end-labels
+    ax.text(
+        0, -0.03,
+        f"{x_var} should be easier",
+        transform=ax.transAxes,
+        ha="left", va="top",
+        fontsize=11.5, fontstyle='italic'
+    )
+    ax.text(
+        1, -0.03,
+        f"{x_var} should be more difficult",
+        transform=ax.transAxes,
+        ha="right", va="top",
+        fontsize=11.5, fontstyle='italic'
+    )
+    ax.text(
+        -0.025, 0.88,
+        f"More {y_var.lower()}",
+        transform=ax.transAxes,
+        ha="right", va="top",
+        rotation=90,
+        fontsize=11.5, fontstyle='italic'
+    )
+    ax.text(
+        -0.025, 0.13,
+        f"Less {y_var.lower()}",
+        transform=ax.transAxes,
+        ha="right", va="bottom",
+        rotation=90,
+        fontsize=11.5, fontstyle='italic'
+    )
+
+    # Title
+    ax.set_title(
+        "Maximizing Votes: How Parties Plot Their Way to Power",
+        fontsize=16,
+        fontweight='bold',
+        pad=25
+    )
+
+    # Add equilibrium stars and labels
+    pc = party_centered.set_index('Party_Name')
+    for _, er in equilibrium_results_df.iterrows():
+        party = er['party']
+        if party not in pc.index:
+            continue
+
+        origin = pc.loc[party, [f"{x_var} Centered", f"{y_var} Centered"]].values
+        v = np.array([er['direction_x'], er['direction_y']])
+        z_opt = origin + er['t_opt'] * v
+
+        ax.scatter(
+            z_opt[0], z_opt[1],
+            marker='*', s=250,
+            c='gold', edgecolor='black', linewidth=1.2,
+            zorder=5, label='_nolegend_'
+        )
+        ax.text(
+            z_opt[0], z_opt[1], f"{party}*",
+            ha='center', va='center',
+            fontsize=10, fontweight='bold', color='black', zorder=6
+        )
+
+    plt.tight_layout()
+    return fig, ax

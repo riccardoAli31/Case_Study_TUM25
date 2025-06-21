@@ -3,6 +3,7 @@ import numpy as np
 from numpy.linalg import eig, eigh
 import data_preprocessing.data_preprocess as dp
 import pipeline_helper_functions.schofield_model_helper as sm
+import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
@@ -184,7 +185,7 @@ print("\n===== EQUILIBRIUM RESULTS ======\n")
 print(equilibrium_results_df)
 
 # --------------------------------------------------- Plot data cloud and equilibrium positions -----------------------------------------------------------------------------------
-
+# logit vs external comparison
 fig = sm.plot_equilibrium_positions(
     all_party_movements_df = all_party_movements_df,
     equilibrium_results_df = equilibrium_results_df,
@@ -195,3 +196,8 @@ fig = sm.plot_equilibrium_positions(
     year                   = year
 )
 fig.show()
+
+# external valence equilibriums
+fig_1, ax = sm.plot_external_valence_equilibrium(equilibrium_results_df=equilibrium_results_df, voter_centered=voter_centered,
+                                                 party_centered=party_centered, x_var=x_var, y_var=y_var)
+plt.show()

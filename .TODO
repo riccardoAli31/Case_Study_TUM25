@@ -1,9 +1,10 @@
 TODO
 - Finish up opinion dynamics model - experiments with coefficients
-- Create a .py file with the opinion dynamics model to produce a new voter sample
-- Use the transformed voter sample to run equilbrium positions of parties
 
-- Remove old 2021 data and add the new source 2024 data
+- Create a .py file for the opinion dynamics model to produce a new voter sample
+- Create a .py file for the external valences equilibrium model
+
+- Use the transformed voter sample to run equilbrium positions of parties
 
 - Introduce new variables to utility function (u_ij = lambda_j - beta*||x_i-z_j||**2 + constant*sociodemographic_var + constant_2*external_valence)
     - sociodemographic variables
