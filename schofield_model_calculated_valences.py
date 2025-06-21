@@ -6,7 +6,7 @@ import pipeline_helper_functions.schofield_model_helper as sm
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year  = "2021"
+year  = "2025"
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
 party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=year)
@@ -180,6 +180,7 @@ for model, mov_df in all_party_movements_df.groupby("Model"):
         
 # put it all in one DataFrame
 equilibrium_results_df = pd.DataFrame(equilibrium_results)
+print("\n===== EQUILIBRIUM RESULTS ======\n")
 print(equilibrium_results_df)
 
 # --------------------------------------------------- Plot data cloud and equilibrium positions -----------------------------------------------------------------------------------
