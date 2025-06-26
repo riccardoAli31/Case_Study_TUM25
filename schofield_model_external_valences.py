@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year  = "2021"
+year  = "2025"
 CHANGE_OPINION = False
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
@@ -22,6 +22,9 @@ if CHANGE_OPINION is True:
 # ------------------------------------------------------------- Valences from DATA  ------------------------------------------------------------------------
 lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
 
+print("\n===== external valences =====\n")
+print(lambda_df)
+
 beta = 0.7
 
 # Filter for common parties for 2025 since we don't have new data for party manifesto
@@ -35,6 +38,8 @@ if year == '2025':
 
 equilibrium_conditions_df = sm.check_equilibrium_conditions(lambda_df=lambda_df, lambda_values=lambda_values, beta=beta,
                                                             voter_centered=voter_centered, x_var=x_var, y_var=y_var)
+
+print("\n===== equilibrium conditions =====\n")
 print(equilibrium_conditions_df)
 
 # ----------------------------------------------------- Movement Recommendations for each party ---------------------------------------------------------------------------------------
@@ -48,8 +53,8 @@ all_party_movements_df = sm.compute_characteristic_matrices(lambda_values=lambda
                                             y_var=y_var)
 
 pd.set_option('display.max_columns', None)
-print("\n----- Characteristic Matrices & Movement Recommendations -----\n")
-print(f"\n===== MODEL EXTERNAL VALENCES =====\n")
+
+print(f"\n===== movement recommendations =====\n")
 print(all_party_movements_df.to_string(index=False))
 
 # ------------------------------------------------------ ANALYZE Saddle and Local Min. Points -----------------------------------------------------------------------------------
@@ -108,6 +113,8 @@ for party in local_min_targets:
         
 # put it all in one DataFrame
 equilibrium_results_df = pd.DataFrame(equilibrium_results)
+
+print(f"\n===== equilibrium results =====\n")
 print(equilibrium_results_df)
 
 # --------------------------------------------------- Plot data cloud and equilibrium positions -----------------------------------------------------------------------------------
