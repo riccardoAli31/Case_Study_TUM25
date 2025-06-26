@@ -1,5 +1,5 @@
 TODO
-- Finish up opinion dynamics model - experiments with coefficients
+- Finish up opinion dynamics model 
 
 - Create a .py file for the opinion dynamics model to produce a new voter sample
 
@@ -8,5 +8,4 @@ TODO
 - Introduce new variables to utility function
     - sociodemographic variables
 
-
-- check how strongly do you incline towars is used correctly (flipped values)
+- check how strongly do you incline towards a party is used correctly (flipped values)
