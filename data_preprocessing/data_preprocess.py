@@ -6,34 +6,6 @@ import data_preprocessing.data_loading as dl
 CONFIG_PATH = "data_preprocessing/configs.json"
 
 
-def aggregate_who_voted_for(voter_df):
-    """In the survey they asked multiple non-overlapping times what party the person voted for,
-    once for normal voter, then what the <18 age voter would have voted and in 2009 they also asked
-    the people who did not vote
-
-    Parameters
-    ----------
-    voter_df : pd.Dataframe
-        survey results from gesis, with NaN decoded as 0
-
-    Returns
-    -------
-    pd.Dataframe
-        where we only have two columns which represent the first and second vote 
-    """
-    if ("first vote (too young)" in voter_df) and ("second vote (too young)" in voter_df):
-        voter_df["who did you vote for:first vote"] += voter_df["first vote (too young)"]
-        voter_df["who did you vote for:second vote"] += voter_df["second vote (too young)"]
-        voter_df.drop(["first vote (too young)", "second vote (too young)"], axis=1, inplace=True)
-
-    if ("first vote (did not vote)" in voter_df) and ("second vote (did not vote)" in voter_df):
-        voter_df["who did you vote for:first vote"] += voter_df["first vote (did not vote)"]
-        voter_df["who did you vote for:second vote"] += voter_df["second vote (did not vote)"]
-        voter_df.drop(["first vote (did not vote)", "second vote (did not vote)"], axis=1, inplace=True)
-
-    return voter_df
-
-
 def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 'data_folder', country: str = 'Germany') -> tuple[pd.DataFrame, pd.DataFrame]:
     # --- Load and filter party data ---
     requested_year = year
@@ -65,7 +37,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
 
     # --- Subset voter_df to only the surviving common items (plus your fixed ones) ---
     policy_columns = set().union(*filtered_mapping.values())
-    columns_to_keep = ["bundesland", "who did you vote for:second vote", "do you incline towards a party, if so which one", 
+    columns_to_keep = ["bundesland", "who did you vote for:second vote", 'year of birth', "do you incline towards a party, if so which one", 
                     "how strongly do you incline towards this party"] + sorted(policy_columns)
     voter_df = voter_df[voter_df.columns.intersection(columns_to_keep)].copy()
 
@@ -79,7 +51,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
         weights = np.ones(len(vars_to_agg)) / len(vars_to_agg)
         voter_df[dim] = voter_df[vars_to_agg].dot(weights)
 
-    voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote', 'do you incline towards a party, if so which one', 
+    voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote', 'year of birth', 'do you incline towards a party, if so which one', 
                         'how strongly do you incline towards this party']].copy()
 
     # --- map voter codes → Party_Name (must match party_scaled['Party_Name']) ---
@@ -90,9 +62,8 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
         5:   "FDP",
         322: "AfD",
         7:   "LINKE",
-        392: "SSW"
     }
-    voter_agg['Party_Name'] = (voter_agg['who did you vote for:second vote'].map(code2party))
+    voter_agg['Party_Name'] = voter_agg['who did you vote for:second vote'].map(code2party)
     # drop everything else (801, -98, etc.)
     voter_agg = voter_agg.dropna(subset=['Party_Name']).reset_index(drop=True)
 
@@ -214,6 +185,9 @@ def get_valence_from_gesis(politicians: dict, year: str) -> pd.DataFrame:
     KeyError
         if not all politicians were found in gesis data
     """
+    # we use fill=False because we don't want that people who don't know the candidate 
+    # (which happens quite often), simply get the median, as it would distort the data,
+    # instead we simply ignore those people
     df = dl.get_gesis_data(year=year, fill=False)
 
     politicians_names = tuple(politicians.keys())

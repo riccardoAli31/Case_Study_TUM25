@@ -89,7 +89,7 @@ def load_party_leaders(fp: str=CONFIG_PATH, year: str = None) -> dict:
         raise KeyError(f"no party leaders for {year} found in {fp}")
     
 
-def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff: int=800, year: str = None, fill: bool=True) -> pd.DataFrame:
+def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff: int=2025, year: str = None, fill: bool=True) -> pd.DataFrame:
     """Load the gesis dataset, which represents voter positions, into a dataframe and does some preprocessing 
     Parameters
     ----------
@@ -119,21 +119,9 @@ def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff:
         file at *path* not found
     """
     if year is not None:
-        pref = os.path.join(path, f"voters_{year}.sav")               # first choice
-        alt  = os.path.join(path, f"voter_dataset_{year}.sav")        # second choice
+        pref = os.path.join(path, f"voters_{year}.sav")
         if os.path.isfile(pref):
             sav_path = pref
-        elif os.path.isfile(alt):
-            sav_path = alt
-        else:
-            # fallback: any file in the folder containing the year
-            candidates = [fn for fn in os.listdir(path) if fn.endswith(".sav") and year in fn]
-            if len(candidates) == 1:
-                sav_path = os.path.join(path, candidates[0])
-            elif len(candidates) > 1:
-                raise FileNotFoundError(f"Multiple GESIS files match year={year!r}: {candidates}")
-            else:
-                raise FileNotFoundError(f"No GESIS file found for year={year!r}")
     else:
         sav_path = os.path.join(path, VOTER_DATA_FILE_NAME)
     if not os.path.isfile(sav_path):
