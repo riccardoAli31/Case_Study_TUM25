@@ -3,6 +3,7 @@ import numpy as np
 import warnings
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import data_preprocessing.data_loading as dl
+from typing import Union, Dict
 CONFIG_PATH = "data_preprocessing/configs.json"
 
 
@@ -37,7 +38,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
 
     # --- Subset voter_df to only the surviving common items (plus your fixed ones) ---
     policy_columns = set().union(*filtered_mapping.values())
-    columns_to_keep = ["bundesland", "who did you vote for:second vote", 'year of birth', "do you incline towards a party, if so which one", 
+    columns_to_keep = ["bundesland", "gender", "who did you vote for:second vote", "year of birth", "do you incline towards a party, if so which one", 
                     "how strongly do you incline towards this party"] + sorted(policy_columns)
     voter_df = voter_df[voter_df.columns.intersection(columns_to_keep)].copy()
 
@@ -51,7 +52,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
         weights = np.ones(len(vars_to_agg)) / len(vars_to_agg)
         voter_df[dim] = voter_df[vars_to_agg].dot(weights)
 
-    voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote', 'year of birth', 'do you incline towards a party, if so which one', 
+    voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote', 'year of birth', 'bundesland', 'gender', 'do you incline towards a party, if so which one', 
                         'how strongly do you incline towards this party']].copy()
 
     # --- map voter codes → Party_Name (must match party_scaled['Party_Name']) ---
@@ -215,24 +216,6 @@ def get_valence_from_gesis(politicians: dict, year: str) -> pd.DataFrame:
 
     return df
 
-def get_age_effect(voter_df: pd.DataFrame, year: str):
-    
-    try:
-        year = int(year)
-    except ValueError:
-        raise ValueError(f"'{year}' can't be converted to an integer")
-    
-    df = voter_df.copy()
-
-    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
-    df.dropna(subset="year of birth", inplace=True, ignore_index=True)
-
-    df = get_age(df, int(year))
-    df = get_age_bracket(df)    
-
-    theta = {party: (df[df["who did you vote for:second vote"] == party]["bracket"].value_counts()/len(df[df["who did you vote for:second vote"] == party])).sort_index().to_numpy() for party in df["who did you vote for:second vote"].unique()}
-
-    return theta
 
 def get_age(voter_df: pd.DataFrame, year_of_survey: int):
     if "year of birth" not in voter_df:
@@ -241,11 +224,11 @@ def get_age(voter_df: pd.DataFrame, year_of_survey: int):
     def calculate_age(year): return year_of_survey - year
     voter_df["age"] = voter_df["year of birth"].apply(calculate_age)
     voter_df.drop("year of birth", axis=1, inplace=True)
-    return voter_df    
+    return voter_df   
 
 
 def get_age_bracket(voter_df: pd.DataFrame):
-    brackets = {(18, 25): 0, (26, 35): 1, (36, 45): 2, (46, 55): 3, (56, 65): 4, (66, 200): 5}
+    brackets = {(18, 25): 0, (26, 35): 1, (36, 45): 2, (46, 55): 3, (56, 65): 4, (66, 100): 5}
 
     def find_bracket(age): 
         for (start, end), bracket in brackets.items(): 
@@ -256,3 +239,87 @@ def get_age_bracket(voter_df: pd.DataFrame):
     voter_df.drop("age", axis=1, inplace=True)
     return voter_df
 
+
+def get_age_effect(voter_df: pd.DataFrame,
+                   year: Union[int, str],
+                   translated: bool = False) -> Union[Dict[int, np.ndarray], pd.DataFrame]:
+    """
+    Compute age‐bracket vote shares by party.
+    
+    Parameters
+    ----------
+    voter_df : pd.DataFrame
+      Must contain columns "year of birth" and "who did you vote for:second vote".
+    year : int or numeric‐string
+      The survey year (for age computation).
+    translated : bool, default False
+      If False, returns a dict mapping party‐codes to arrays of bracket‐shares.
+      If True, returns a DataFrame with columns ["party","bracket","share"].
+    """
+    # --- parse & clean birth‐year ---
+    try:
+        year = int(year)
+    except ValueError:
+        raise ValueError(f"'{year}' can't be converted to an integer")
+    df = voter_df.copy()
+    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
+    df.dropna(subset=["year of birth"], inplace=True)
+    df.reset_index(drop=True, inplace=True)
+
+    # --- compute ages & brackets ---
+    df = get_age(df, year)
+    df = get_age_bracket(df)   # adds "bracket" column ∈ {0,…,5}
+
+    # --- raw theta dict: party‐code → array of bracket‐shares ---
+    theta: Dict[int,np.ndarray] = {
+        party: (
+            df.loc[df["who did you vote for:second vote"] == party, "bracket"]
+              .value_counts(normalize=True)
+              .sort_index()
+              .to_numpy()
+        )
+        for party in df["who did you vote for:second vote"].unique()
+    }
+
+    if not translated:
+        return theta
+
+    # --- translation maps ---
+    code2party = {
+        4:  "SPD",
+        1:  "CDU/CSU",
+        6:  "90/Greens",
+        5:  "FDP",
+        322:"AfD",
+        7:  "LINKE",
+    }
+    bracket_labels = {
+        0: "18–25",
+        1: "26–35",
+        2: "36–45",
+        3: "46–55",
+        4: "56–65",
+        5: "66–100",
+    }
+
+    # --- build a DataFrame from the theta dict ---
+    # rows = party codes, cols = bracket‐ids
+    df_theta = (
+        pd.DataFrame.from_dict(theta, orient="index")
+          .rename_axis("party_code", axis=0)
+          .rename_axis("bracket_id", axis=1)
+          .reset_index()
+    )
+    # map codes → names & bracket_ids → bracket_labels
+    df_theta["party"] = df_theta["party_code"].map(code2party)
+    df_theta = df_theta.rename(columns=bracket_labels)
+    # melt into long form
+    df_long = df_theta.melt(
+        id_vars=["party"],
+        value_vars=list(bracket_labels.values()),
+        var_name="bracket",
+        value_name="share"
+    )
+    # drop NaN parties if any codes were unexpected
+    df_long = df_long.dropna(subset=["party"]).reset_index(drop=True)
+    return df_long
