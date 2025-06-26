@@ -8,5 +8,6 @@ TODO
 - Introduce new variables to utility function
     - sociodemographic variables - age, gender, bundesland
     - check calculations
+    - include calculations in local min function
 
 - check how strongly do you incline towards a party is used correctly (flipped values)
