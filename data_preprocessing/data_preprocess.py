@@ -214,3 +214,45 @@ def get_valence_from_gesis(politicians: dict, year: str) -> pd.DataFrame:
     df = df.groupby("Party_Name", as_index=False).agg({"politician": ' '.join, "valence": "mean"})
 
     return df
+
+def get_age_effect(voter_df: pd.DataFrame, year: str):
+    
+    try:
+        year = int(year)
+    except ValueError:
+        raise ValueError(f"'{year}' can't be converted to an integer")
+    
+    df = voter_df.copy()
+
+    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
+    df.dropna(subset="year of birth", inplace=True, ignore_index=True)
+
+    df = get_age(df, int(year))
+    df = get_age_bracket(df)    
+
+    theta = {party: (df[df["who did you vote for:second vote"] == party]["bracket"].value_counts()/len(df[df["who did you vote for:second vote"] == party])).sort_index().to_numpy() for party in df["who did you vote for:second vote"].unique()}
+
+    return theta
+
+def get_age(voter_df: pd.DataFrame, year_of_survey: int):
+    if "year of birth" not in voter_df:
+        print("haja")
+        return
+    def calculate_age(year): return year_of_survey - year
+    voter_df["age"] = voter_df["year of birth"].apply(calculate_age)
+    voter_df.drop("year of birth", axis=1, inplace=True)
+    return voter_df    
+
+
+def get_age_bracket(voter_df: pd.DataFrame):
+    brackets = {(18, 25): 0, (26, 35): 1, (36, 45): 2, (46, 55): 3, (56, 65): 4, (66, 200): 5}
+
+    def find_bracket(age): 
+        for (start, end), bracket in brackets.items(): 
+            if start <= age <= end: 
+                return bracket
+            
+    voter_df["bracket"] = voter_df["age"].apply(find_bracket)
+    voter_df.drop("age", axis=1, inplace=True)
+    return voter_df
+

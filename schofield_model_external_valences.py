@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year  = "2025"
+year  = "2009"
 CHANGE_OPINION = False
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
@@ -15,6 +15,11 @@ party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y
 party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
                             columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
 party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
+
+theta = dp.get_age_effect(voter_centered, year=year)
+
+print("\n===== theta =====\n")
+print(theta)
 
 if CHANGE_OPINION is True:
     voter_centered = pd.DataFrame()

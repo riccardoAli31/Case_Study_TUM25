@@ -133,7 +133,7 @@ def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff:
     mapping = load_gesis_mapping(CONFIG_PATH, os.path.basename(sav_path))
     df.rename(mapping, inplace=True, axis=1)
 
-    # drop all unneeded columns
+    # drop all columns not in the mapping
     cols = list(mapping.values())
     df.drop(df.columns.difference(cols), axis=1, inplace=True)
 
