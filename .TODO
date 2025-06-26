@@ -5,10 +5,8 @@ TODO
 
 - Use the transformed voter sample to run equilbrium positions of parties
 
-- Introduce new variables to utility function (u_ij = lambda_j - beta*||x_i-z_j||**2 + constant*sociodemographic_var + constant_2*external_valence)
+- Introduce new variables to utility function
     - sociodemographic variables
-    - external valences
-    
-- Is it possible to account for the principles of the party rather than just maximizing votes?
+
 
 - check how strongly do you incline towars is used correctly (flipped values)
