@@ -235,13 +235,28 @@ def get_age_bracket(voter_df: pd.DataFrame):
             if start <= age <= end: 
                 return bracket
             
-    voter_df["bracket"] = voter_df["age"].apply(find_bracket)
-    voter_df.drop("age", axis=1, inplace=True)
+    voter_df["Age_Bracket"] = voter_df["age"].apply(find_bracket)
+    # voter_df.drop("age", axis=1, inplace=True)
     return voter_df
 
 
-def get_age_effect(voter_df: pd.DataFrame,
-                   year: Union[int, str],
+def add_age_col_to_voters(voter_df, year):
+    try:
+        year = int(year)
+    except ValueError:
+        raise ValueError(f"'{year}' can't be converted to an integer")
+    df = voter_df.copy()
+    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
+    df.dropna(subset=["year of birth"], inplace=True)
+    df.reset_index(drop=True, inplace=True)
+
+    # --- compute ages & brackets ---
+    df = get_age(df, year)
+    df = get_age_bracket(df)   # adds "bracket" column ∈ {0,…,5}
+    return df
+
+
+def get_age_effect(df: pd.DataFrame,
                    translated: bool = False) -> Union[Dict[int, np.ndarray], pd.DataFrame]:
     """
     Compute age‐bracket vote shares by party.
@@ -256,34 +271,6 @@ def get_age_effect(voter_df: pd.DataFrame,
       If False, returns a dict mapping party‐codes to arrays of bracket‐shares.
       If True, returns a DataFrame with columns ["party","bracket","share"].
     """
-    # --- parse & clean birth‐year ---
-    try:
-        year = int(year)
-    except ValueError:
-        raise ValueError(f"'{year}' can't be converted to an integer")
-    df = voter_df.copy()
-    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
-    df.dropna(subset=["year of birth"], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-
-    # --- compute ages & brackets ---
-    df = get_age(df, year)
-    df = get_age_bracket(df)   # adds "bracket" column ∈ {0,…,5}
-
-    # --- raw theta dict: party‐code → array of bracket‐shares ---
-    theta: Dict[int,np.ndarray] = {
-        party: (
-            df.loc[df["who did you vote for:second vote"] == party, "bracket"]
-              .value_counts(normalize=True)
-              .sort_index()
-              .to_numpy()
-        )
-        for party in df["who did you vote for:second vote"].unique()
-    }
-
-    if not translated:
-        return theta
-
     # --- translation maps ---
     code2party = {
         4:  "SPD",
@@ -302,6 +289,21 @@ def get_age_effect(voter_df: pd.DataFrame,
         5: "66–100",
     }
 
+    # --- raw theta dict: party‐code → array of bracket‐shares ---
+    theta: Dict[int,np.ndarray] = {
+        party: (
+            df.loc[df["who did you vote for:second vote"] == party, "Age_Bracket"]
+              .value_counts(normalize=True)
+              .sort_index()
+              .to_numpy()
+        )
+        for party in df["who did you vote for:second vote"].unique()
+    }
+    theta_named = {code2party.get(code, code): shares for code, shares in theta.items()}
+    
+    if not translated:
+        return theta_named
+
     # --- build a DataFrame from the theta dict ---
     # rows = party codes, cols = bracket‐ids
     df_theta = (
@@ -317,7 +319,7 @@ def get_age_effect(voter_df: pd.DataFrame,
     df_long = df_theta.melt(
         id_vars=["party"],
         value_vars=list(bracket_labels.values()),
-        var_name="bracket",
+        var_name="Age_Bracket",
         value_name="share"
     )
     # drop NaN parties if any codes were unexpected

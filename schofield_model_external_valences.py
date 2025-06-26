@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import data_preprocessing.data_preprocess as dp
 import pipeline_helper_functions.schofield_model_helper as sm
 import matplotlib.pyplot as plt
@@ -7,23 +8,17 @@ x_var = "Opposition to Immigration"
 y_var = "Welfare State"
 year  = "2021"
 CHANGE_OPINION = False
-include_sociodemographic_variables = False
+include_sociodemographic_variables = True
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
 party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=year)
 party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
                             columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
 party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
+voter_centered = dp.add_age_col_to_voters(voter_df=voter_centered, year=year)
 
 if CHANGE_OPINION is True:
     voter_centered = pd.DataFrame()
-
-theta = dp.get_age_effect(voter_centered, year=year)
-# Long dataframe format of theta values for each party and age bracket
-theta_df = dp.get_age_effect(voter_centered, year=year, translated=True).pivot(index='party', columns='bracket', values='share')
-
-print("\n===== theta =====\n")
-print(theta_df)
 
 # ------------------------------------------------------------- Valences from DATA  ------------------------------------------------------------------------
 lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
@@ -39,6 +34,30 @@ if year == '2025':
     party_centered = party_centered[party_centered['Party_Name'].isin(parties)]
     lambda_df = lambda_df[lambda_df['Party_Name'].isin(parties)]
     lambda_values = lambda_df["valence"].values
+
+# ------------------------------------------------------ Sociodemographic Variables Preprocessing ------------------------------------------------------------------------------------------------
+######## -----  AGE  ----- ########
+theta = dp.get_age_effect(voter_centered)
+# Long dataframe format of theta values for each party and age bracket
+theta_df = dp.get_age_effect(voter_centered, translated=True).pivot(index='party', columns='Age_Bracket', values='share')
+print("\n===== theta =====\n")
+print(theta_df)
+
+# prepare S matrix: an (n_voters × 6) one‐hot matrix for brackets 0…5, leave NaN rows all‐zeros
+ages = voter_centered["Age_Bracket"].to_numpy()    
+n = len(ages)
+n_brackets = voter_centered["Age_Bracket"].nunique()
+S = np.zeros((n, n_brackets))
+
+for i, a in enumerate(ages):
+    if not np.isnan(a):
+        idx = int(a)
+        if 0 <= idx < n_brackets:
+            S[i, idx] = 1
+
+# build the theta_vals matrix by stacking
+ordered = lambda_df.sort_values("class_index")["Party_Name"].tolist()
+theta_vals = np.vstack([theta[p] for p in ordered])
 
 # --------------------------------------------------------- Equilibrium conditions Check ---------------------------------------------------------------------------------------
 
@@ -94,8 +113,8 @@ for party in saddle_targets:
         y_var                       = y_var,
         target_party_name           = party,
         include_sociodemographic    = include_sociodemographic_variables,
-        sociodemographic_matrix     = None,
-        theta_vals                  = None)
+        sociodemographic_matrix     = S,
+        theta_vals                  = theta_vals)
     equilibrium_results.append({
         "party":        party,
         "type":         "saddle",
