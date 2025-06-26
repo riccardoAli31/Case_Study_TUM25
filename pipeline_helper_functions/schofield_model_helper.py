@@ -134,7 +134,7 @@ def check_equilibrium_conditions(lambda_df, lambda_values, beta, voter_centered,
     nu2 = np.trace(cov)
     c   = 2 * A1 * nu2
     suf = (c < 1)
-    suf_label = "satisfied" if not nec else "not satisfied"
+    suf_label = "satisfied" if not suf else "not satisfied"
 
     # 8) append a record with flattened entries
     equilibrium_conditions.append({
@@ -228,7 +228,9 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
 
 
 def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_df: pd.DataFrame, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
-                                            beta: float, x_var: str, y_var: str, target_party_name: str) -> tuple[np.ndarray, float, float]:
+                                            beta: float, x_var: str, y_var: str, target_party_name: str,
+                                            include_sociodemographic: bool = False, sociodemographic_matrix: np.ndarray = None,
+                                            theta_vals: np.ndarray = None) -> tuple[np.ndarray, float, float]:
     """
     Given:
       - lambda_values: length‐p array of intercepts (λ₀, …, λ_{p−1}) from your original fit
@@ -287,47 +289,66 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
     v_pos = v_pos / np.linalg.norm(v_pos)   # normalize to length 1
 
     # 7) Define the average vote share function
-    def vote_share_given_t(t_scalar: float) -> float:
+    def vote_share_given_t(t_scalar, include_sociodemographic, sociodemographic_matrix, theta_vals) -> float:
         """
         Move party j to (t_scalar * v_pos). Recompute D_new = -||Y − Z_new||²,
-        then form logit-numerators D_new[i,j] + λ_j. Finally, do a rowwise softmax
-        and return the average probability that i chooses j.
+        then form logit-numerators D_new + λ_j + (θ_j^T s_i if include_socio).
+        Do a rowwise softmax and return the avg prob that each i chooses j.
+        
+        Parameters
+        ----------
+        t_scalar : float
+        How far to shift party j along v_pos.
+        include_sociodemographic : bool
+        If True, add the θ_j^T s_i term to the utility.
+        sociodemographic_matrix : np.ndarray, shape (n, k), optional
+        The socio-demographic matrix, one row per voter.
+        theta_vals : np.ndarray, shape (p, k), optional
+        One row per party of socio-demographic coefficients θ_j.
         """
-        # 7a) Make a copy of Z and move party j:
+        # 7a) Move party j
         Z_new = Z.copy()
         Z_new[j_idx, :] = t_scalar * v_pos
 
-        # 7b) Compute new squared distances and D_new = -dist²:
-        dist2_new = ((Y[:, None, :] - Z_new[None, :, :])**2).sum(axis=2)  # shape (n,p)
-        D_new     = -dist2_new
+        # 7b) Compute D_new = -||Y - Z_new||^2
+        dist2_new = ((Y[:, None, :] - Z_new[None, :, :])**2).sum(axis=2)
+        D_new     = -dist2_new              # shape (n, p)
 
-        # 7c) Build logit_numerators (n×p) = D_new + λ_j * 1_nrow
-        #     λ_j is length p, so broadcast down each row:
-        logit_num = D_new + lambda_values[None, :]    # shape (n,p)
+        # 7c) Base logit numerator = D_new + lambda_j
+        logit_num = D_new + lambda_values[None, :]   # broadcast λ over rows
 
-        # 7d) Convert row‐by‐row to probabilities via softmax:
+        # 7d) Optionally add θ_j^T s_i for each (i,j)
+        if include_sociodemographic:
+            if sociodemographic_matrix is None or theta_vals is None:
+                raise ValueError("Must pass sociodemographic_matrix and theta_vals when include_sociodemographic=True")
+            # S: (n, k), theta_vals: (p, k) → socio_term: (n, p)
+            socio_term = sociodemographic_matrix.dot(theta_vals.T)
+            logit_num += socio_term
+
+        # 7e) Softmax row-wise
         row_max = np.max(logit_num, axis=1, keepdims=True)
         exp_t   = np.exp(logit_num - row_max)
         denom   = exp_t.sum(axis=1, keepdims=True)
-        probs   = exp_t / denom   # shape (n,p)
+        probs   = exp_t / denom  # (n, p)
 
-        # 7e) The average probability that each voter i chooses party j_idx:
+        # 7f) Return avg probability that voters choose party j_idx
         return float(probs[:, j_idx].mean())
 
     # 8) Now find t_opt that maximizes vote_share
     #    We do a bounded 1D optimization 
-    def neg_share(t_scalar: float) -> float:
-        return -vote_share_given_t(t_scalar)
+    def neg_share(t_scalar, include_sociodemographic, sociodemographic_matrix, theta_vals) -> float:
+        return -vote_share_given_t(t_scalar, include_sociodemographic, sociodemographic_matrix, theta_vals)
 
     bracket = (-100, 100)
     result  = minimize(
         fun = neg_share,
-        x0  = np.array([0]),    
+        x0  = np.array([0]),  
+        args= (include_sociodemographic, sociodemographic_matrix, theta_vals),  
         bounds = [bracket],
         method = "L-BFGS-B"
     )
     t_opt     = float(result.x[0])
-    share_opt = vote_share_given_t(t_opt)
+    share_opt = vote_share_given_t(t_opt, include_sociodemographic, sociodemographic_matrix, theta_vals)
 
     return v_pos, t_opt, share_opt
 

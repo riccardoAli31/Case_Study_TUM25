@@ -1,14 +1,13 @@
 import pandas as pd
-import numpy as np
-from numpy.linalg import eig, eigh
 import data_preprocessing.data_preprocess as dp
 import pipeline_helper_functions.schofield_model_helper as sm
 import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year  = "2009"
+year  = "2021"
 CHANGE_OPINION = False
+include_sociodemographic_variables = False
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
 party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=year)
@@ -16,13 +15,15 @@ party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name'
                             columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
 party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
 
-theta = dp.get_age_effect(voter_centered, year=year)
-
-print("\n===== theta =====\n")
-print(theta)
-
 if CHANGE_OPINION is True:
     voter_centered = pd.DataFrame()
+
+theta = dp.get_age_effect(voter_centered, year=year)
+# Long dataframe format of theta values for each party and age bracket
+theta_df = dp.get_age_effect(voter_centered, year=year, translated=True).pivot(index='party', columns='bracket', values='share')
+
+print("\n===== theta =====\n")
+print(theta_df)
 
 # ------------------------------------------------------------- Valences from DATA  ------------------------------------------------------------------------
 lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
@@ -84,14 +85,17 @@ local_min_targets = all_party_movements2.loc[all_party_movements2["action"].str.
 # --- compute saddle results ---
 for party in saddle_targets:
     v_pos, t_opt, share_opt = sm.compute_optimal_movement_saddle_position(
-        lambda_values     = lambda_values2,
-        lambda_df         = lambda_df2,
-        voter_centered    = voter_centered,   
-        party_centered    = party_centered2,         
-        beta              = beta,
-        x_var             = x_var,
-        y_var             = y_var,
-        target_party_name = party)
+        lambda_values               = lambda_values2,
+        lambda_df                   = lambda_df2,
+        voter_centered              = voter_centered,   
+        party_centered              = party_centered2,         
+        beta                        = beta,
+        x_var                       = x_var,
+        y_var                       = y_var,
+        target_party_name           = party,
+        include_sociodemographic    = include_sociodemographic_variables,
+        sociodemographic_matrix     = None,
+        theta_vals                  = None)
     equilibrium_results.append({
         "party":        party,
         "type":         "saddle",
