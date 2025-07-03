@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year  = "2021"
+year  = "2025"
 CHANGE_OPINION = False
 include_sociodemographic_variables = True
 
@@ -26,7 +26,7 @@ lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
 print("\n===== external valences =====\n")
 print(lambda_df)
 
-beta = 0.7
+beta = 0.85
 
 # Filter for common parties for 2025 since we don't have new data for party manifesto
 if year == '2025':

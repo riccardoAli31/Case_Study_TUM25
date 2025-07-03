@@ -38,7 +38,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
 
     # --- Subset voter_df to only the surviving common items (plus your fixed ones) ---
     policy_columns = set().union(*filtered_mapping.values())
-    columns_to_keep = ["bundesland", "gender", "who did you vote for:second vote", "year of birth", "do you incline towards a party, if so which one", 
+    columns_to_keep = ["bundesland", "gender", "second vote", "year of birth", "do you incline towards a party, if so which one", 
                     "how strongly do you incline towards this party"] + sorted(policy_columns)
     voter_df = voter_df[voter_df.columns.intersection(columns_to_keep)].copy()
 
@@ -52,7 +52,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
         weights = np.ones(len(vars_to_agg)) / len(vars_to_agg)
         voter_df[dim] = voter_df[vars_to_agg].dot(weights)
 
-    voter_agg = voter_df[[x_var, y_var, 'who did you vote for:second vote', 'year of birth', 'bundesland', 'gender', 'do you incline towards a party, if so which one', 
+    voter_agg = voter_df[[x_var, y_var, 'second vote', 'year of birth', 'bundesland', 'gender', 'do you incline towards a party, if so which one', 
                         'how strongly do you incline towards this party']].copy()
 
     # --- map voter codes → Party_Name (must match party_scaled['Party_Name']) ---
@@ -64,7 +64,7 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
         322: "AfD",
         7:   "LINKE",
     }
-    voter_agg['Party_Name'] = voter_agg['who did you vote for:second vote'].map(code2party)
+    voter_agg['Party_Name'] = voter_agg['second vote'].map(code2party)
     # drop everything else (801, -98, etc.)
     voter_agg = voter_agg.dropna(subset=['Party_Name']).reset_index(drop=True)
 
@@ -260,7 +260,7 @@ def get_age_effect(voter_df: pd.DataFrame, year: str) -> Dict[str, np.ndarray]:
 
     # calculate the bracket shares for each party by counting how many people for a given party are in each bracket
     # and dividing by total number of people who voted for that party
-    theta = {party: (df[df["who did you vote for:second vote"] == party]["bracket"].value_counts()/len(df[df["who did you vote for:second vote"] == party])).sort_index().to_numpy() for party in df["who did you vote for:second vote"].unique()}
+    theta = {party: (df[df["second vote"] == party]["bracket"].value_counts()/len(df[df["second vote"] == party])).sort_index().to_numpy() for party in df["second vote"].unique()}
 
     return theta
 
@@ -344,7 +344,7 @@ def get_age_effect(df: pd.DataFrame,
     Parameters
     ----------
     voter_df : pd.DataFrame
-      Must contain columns "year of birth" and "who did you vote for:second vote".
+      Must contain columns "year of birth" and "second vote".
     year : int or numeric‐string
       The survey year (for age computation).
     translated : bool, default False
@@ -372,12 +372,12 @@ def get_age_effect(df: pd.DataFrame,
     # --- raw theta dict: party‐code → array of bracket‐shares ---
     theta: Dict[int,np.ndarray] = {
         party: (
-            df.loc[df["who did you vote for:second vote"] == party, "Age_Bracket"]
+            df.loc[df["second vote"] == party, "Age_Bracket"]
               .value_counts(normalize=True)
               .sort_index()
               .to_numpy()
         )
-        for party in df["who did you vote for:second vote"].unique()
+        for party in df["second vote"].unique()
     }
     theta_named = {code2party.get(code, code): shares for code, shares in theta.items()}
     

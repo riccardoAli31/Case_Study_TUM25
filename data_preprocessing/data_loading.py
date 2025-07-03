@@ -103,7 +103,7 @@ def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff:
         no answer is often encoded with -71
     year : str, optional
         the year for which data is to be loaded, by default None
-        should be in ["2009", "2013", "2017", "2021"]
+        should be in ["2009", "2013", "2017", "2021", "2025"]
     fill : bool, optional
         if np.nan values should be filled with median for numerics and 0 for other columns, by default True
 
@@ -141,9 +141,33 @@ def get_gesis_data(path: str="data_folder", lower_cutoff: int=-70, upper_cutoff:
     num_cols = df.select_dtypes(include=[np.number]).columns
     df[num_cols] = df[num_cols].mask(df[num_cols] < lower_cutoff)
     df[num_cols] = df[num_cols].mask(df[num_cols] > upper_cutoff)
-    if fill:
-        df[num_cols] = df[num_cols].fillna(df[num_cols].median())
-        df = df.fillna(0)  
+
+    # fill missing values in numerical columns with the median of that column
+    # but only if we have less than 5% nan values
+    num_cols = [col for col in num_cols if df[col].isnull().mean() < 0.05]
+    df[num_cols] = df[num_cols].fillna(df[num_cols].median())
+    # df = df.fillna(0)  
+
+    # aggregate the columns of the people who voted and those who didn't
+    # to get one single column for the voting decision 
+    df = aggregate_voting_decision(df)
     
+    return df
+
+
+def aggregate_voting_decision(df: pd.DataFrame):
+    # Fix not yet working if both young and not vote are in df
+    if ("first vote (too young)" in df) and ("second vote (too young)" in df):
+        df["first vote"] = df[["first vote (too young)", "first vote (did vote)"]].max(axis=1)
+        df["second vote"] = df[["second vote (too young)", "second vote (did vote)"]].max(axis=1)
+        df.drop(["first vote (too young)", "second vote (too young)"], axis=1, inplace=True)
+
+    if ("first vote (did not vote)" in df) and ("second vote (did not vote)" in df):
+        df["first vote"] = df[["first vote (did not vote)", "first vote (did vote)"]].max(axis=1)
+        df["second vote"] = df[["second vote (did not vote)", "second vote (did vote)"]].max(axis=1)
+        df.drop(["first vote (did not vote)", "second vote (did not vote)"], axis=1, inplace=True)
+
+    df.drop(["first vote (did vote)", "second vote (did vote)"], axis=1, inplace=True)
+
     return df
 
