@@ -1,4 +1,4 @@
-import pandas as pd 
+import pandas as pd
 import numpy as np
 import warnings
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -14,9 +14,11 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
     years_available = sorted(party_df['Year'].unique())
     if year not in years_available:
         fallback = years_available[-1]
-        warnings.warn(f"Requested year {year!r} not found in party data; "f"falling back to most recent year {fallback!r}.", UserWarning)
+        warnings.warn(
+            f"Requested year {year!r} not found in party data; "f"falling back to most recent year {fallback!r}.", UserWarning)
         year = fallback
-    party_year_filtered = party_df[party_df['Year'] == year].reset_index(drop=True)
+    party_year_filtered = party_df[party_df['Year']
+                                   == year].reset_index(drop=True)
 
     # --- Load voter data ---
     voter_df = dl.get_gesis_data(path=file_dir, year=requested_year)
@@ -38,22 +40,23 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
 
     # --- Subset voter_df to only the surviving common items (plus your fixed ones) ---
     policy_columns = set().union(*filtered_mapping.values())
-    columns_to_keep = ["bundesland", "gender", "second vote", "year of birth", "do you incline towards a party, if so which one", 
-                    "how strongly do you incline towards this party"] + sorted(policy_columns)
+    columns_to_keep = ["bundesland", "gender", "second vote", "year of birth", "do you incline towards a party, if so which one",
+                       "how strongly do you incline towards this party"] + sorted(policy_columns)
     voter_df = voter_df[voter_df.columns.intersection(columns_to_keep)].copy()
 
-    # Create aggregated features for the voters'data 
+    # Create aggregated features for the voters'data
     # Since for one variable of the party's data, we have a few corresponding ones from the voters'data, we'll have to aggregate the voter's feature into one
     # --- Aggregate voter features for each dimension ---
     for dim in (x_var, y_var):
         vars_to_agg = filtered_mapping[dim]
         if len(vars_to_agg) == 0:
-            raise RuntimeError(f"For the variable {dim} there are no features to aggregate")
+            raise RuntimeError(
+                f"For the variable {dim} there are no features to aggregate")
         weights = np.ones(len(vars_to_agg)) / len(vars_to_agg)
         voter_df[dim] = voter_df[vars_to_agg].dot(weights)
 
-    voter_agg = voter_df[[x_var, y_var, 'second vote', 'year of birth', 'bundesland', 'gender', 'do you incline towards a party, if so which one', 
-                        'how strongly do you incline towards this party']].copy()
+    voter_agg = voter_df[[x_var, y_var, 'second vote', 'year of birth', 'bundesland', 'gender', 'do you incline towards a party, if so which one',
+                          'how strongly do you incline towards this party']].copy()
 
     # --- map voter codes → Party_Name (must match party_scaled['Party_Name']) ---
     code2party = {
@@ -70,8 +73,9 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
 
     # --- build integer choice 0..p-1 in the same order as party_scaled ---
     party_order = list(voter_agg['Party_Name'].unique())
-    name2idx = {name:i for i,name in enumerate(party_order)}
-    voter_agg['party_choice'] = voter_agg['Party_Name'].map(name2idx).astype(int)
+    name2idx = {name: i for i, name in enumerate(party_order)}
+    voter_agg['party_choice'] = voter_agg['Party_Name'].map(
+        name2idx).astype(int)
 
     return party_year_filtered, voter_agg
 
@@ -79,26 +83,29 @@ def get_raw_party_voter_data(x_var: str, y_var: str, year: str, file_dir: str = 
 def party_position_weighted(df, x_var, y_var, weight_manifesto=0.2, weight_voters_mean=0.8):
     # Build the expected column names for x_var
     x_scaled_col = f"{x_var} Scaled"
-    x_mean_col   = f"{x_var} Voters_Mean"
-    x_comb_col   = f"{x_var} Combined"
+    x_mean_col = f"{x_var} Voters_Mean"
+    x_comb_col = f"{x_var} Combined"
     # Build the expected column names for y_var
     y_scaled_col = f"{y_var} Scaled"
-    y_mean_col   = f"{y_var} Voters_Mean"
-    y_comb_col   = f"{y_var} Combined"
+    y_mean_col = f"{y_var} Voters_Mean"
+    y_comb_col = f"{y_var} Combined"
     # Check that the required columns exist
     for col in (x_scaled_col, x_mean_col, y_scaled_col, y_mean_col):
         if col not in df.columns:
             raise KeyError(f"Required column '{col}' not found in DataFrame.")
     # Compute the “combined” columns
-    df[x_comb_col] = weight_manifesto * df[x_scaled_col] + weight_voters_mean * df[x_mean_col]
-    df[y_comb_col] = weight_manifesto * df[y_scaled_col] + weight_voters_mean * df[y_mean_col]
+    df[x_comb_col] = weight_manifesto * df[x_scaled_col] + \
+        weight_voters_mean * df[x_mean_col]
+    df[y_comb_col] = weight_manifesto * df[y_scaled_col] + \
+        weight_voters_mean * df[y_mean_col]
 
     return df
 
 
 def get_scaled_party_voter_data(x_var: str, y_var: str, year: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
-    party_year_filtered, voter_agg = get_raw_party_voter_data(x_var=x_var, y_var=y_var, year=year)
+    party_year_filtered, voter_agg = get_raw_party_voter_data(
+        x_var=x_var, y_var=y_var, year=year)
 
     # --- Standardize all clouds ---
     vot_pts = voter_agg[[x_var, y_var]].copy()
@@ -121,15 +128,18 @@ def get_scaled_party_voter_data(x_var: str, y_var: str, year: str) -> tuple[pd.D
 
     # --- Compute voter means for party positions for each scaled dimension ---
     party_means = (voter_df_scaled.groupby('Party_Name')[[f"{x_var} Scaled", f"{y_var} Scaled"]].mean().reset_index()
-                            .rename(columns={f"{x_var} Scaled": f'{x_var} Voters_Mean', f"{y_var} Scaled": f'{y_var} Voters_Mean'}))
-    mean_df = party_means[[f'{x_var} Voters_Mean', f'{y_var} Voters_Mean', 'Party_Name']].copy()
+                   .rename(columns={f"{x_var} Scaled": f'{x_var} Voters_Mean', f"{y_var} Scaled": f'{y_var} Voters_Mean'}))
+    mean_df = party_means[[f'{x_var} Voters_Mean',
+                           f'{y_var} Voters_Mean', 'Party_Name']].copy()
 
     # --- Merge scaled manifesto data with voters mean positions ---
-    party_df_scaled = party_df_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', x_var, y_var, f"{x_var} Scaled", f"{y_var} Scaled"]]
+    party_df_scaled = party_df_scaled[['Country', 'Date', 'Calendar_Week',
+                                       'Party_Name', x_var, y_var, f"{x_var} Scaled", f"{y_var} Scaled"]]
     party_df_scaled = party_df_scaled.merge(mean_df, on='Party_Name')
 
     # --- Final party posiitons: 0.2*manifesto + 0.8*voters mean ---
-    party_df_scaled = party_position_weighted(df=party_df_scaled, x_var=x_var, y_var=y_var)
+    party_df_scaled = party_position_weighted(
+        df=party_df_scaled, x_var=x_var, y_var=y_var)
 
     party_df_scaled['Label'] = party_df_scaled['Party_Name']
     voter_df_scaled['Label'] = 'Voter'
@@ -155,12 +165,16 @@ def center_party_voter_data(voter_df, party_df, x_var, y_var):
     mean_series = voter_df[[x_scaled_col, y_scaled_col]].astype(float).mean()
 
     # 2) Subtract the voter‐means and store results in two new columns in voter_df
-    voter_df[x_centered_col] = voter_df[x_scaled_col].astype(float) - mean_series[x_scaled_col]
-    voter_df[y_centered_col] = voter_df[y_scaled_col].astype(float) - mean_series[y_scaled_col]
+    voter_df[x_centered_col] = voter_df[x_scaled_col].astype(
+        float) - mean_series[x_scaled_col]
+    voter_df[y_centered_col] = voter_df[y_scaled_col].astype(
+        float) - mean_series[y_scaled_col]
 
     # 3) Subtract the same voter‐means in party_df
-    party_df[x_centered_col] = party_df[x_scaled_col].astype(float) - mean_series[x_scaled_col]
-    party_df[y_centered_col] = party_df[y_scaled_col].astype(float) - mean_series[y_scaled_col]
+    party_df[x_centered_col] = party_df[x_scaled_col].astype(
+        float) - mean_series[x_scaled_col]
+    party_df[y_centered_col] = party_df[y_scaled_col].astype(
+        float) - mean_series[y_scaled_col]
 
     return party_df, voter_df
 
@@ -186,7 +200,7 @@ def get_valence_from_gesis(politicians: dict, year: str) -> pd.DataFrame:
     KeyError
         if not all politicians were found in gesis data
     """
-    # we use fill=False because we don't want that people who don't know the candidate 
+    # we use fill=False because we don't want that people who don't know the candidate
     # (which happens quite often), simply get the median, as it would distort the data,
     # instead we simply ignore those people
     df = dl.get_gesis_data(year=year, fill=False)
@@ -210,198 +224,9 @@ def get_valence_from_gesis(politicians: dict, year: str) -> pd.DataFrame:
     df["politician"] = df["politician"].apply(lambda s: s.split(":")[-1])
     df["Party_Name"] = df["politician"].apply(lambda s: politicians[s])
     df.index = np.arange(len(df))
-    
+
     # if there are multiple top candiates for one party, we take the mean
-    df = df.groupby("Party_Name", as_index=False).agg({"politician": ' '.join, "valence": "mean"})
+    df = df.groupby("Party_Name", as_index=False).agg(
+        {"politician": ' '.join, "valence": "mean"})
 
     return df
-
-
-def get_age_effect(voter_df: pd.DataFrame, year: str) -> Dict[str, np.ndarray]:
-    """Calculates the theta values for each party j by looking at the percentage
-    of the voters of that party in each bracket, so how many of the voters for party j 
-    are in bracket 0, 1, 2,...
-
-    Parameters
-    ----------
-    voter_df : pd.DataFrame
-        survey data, where each row is one person
-    year : str
-        year when the survey was conducted 
-
-    Returns
-    -------
-    Dict[str, np.ndarray]
-        keys are the parties and the array represents the theta for that party
-        where the i-th index correspons to the i-th bracket.
-        So if 10% of the voters of SPD are in bracket 2, we have
-        theta["SPD"][2] = 0.10
-
-    Raises
-    ------
-    ValueError
-        if the string 'year' can't be converted to an integer
-    """
-    try:
-        year = int(year)
-    except ValueError:
-        raise ValueError(f"'{year}' can't be converted to an integer")
-    
-    df = voter_df.copy()
-
-    # try to convert the strings to numeric values, in the later years (>= 2017)
-    # there will be errors (which we coerce) because they have answers of the form
-    # "1930 or earlier", which can't be converted to int. We drop those
-    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
-    df.dropna(subset="year of birth", inplace=True, ignore_index=True)
-
-    df = get_age(df, int(year))
-    df = get_age_bracket(df)    
-
-    # calculate the bracket shares for each party by counting how many people for a given party are in each bracket
-    # and dividing by total number of people who voted for that party
-    theta = {party: (df[df["second vote"] == party]["bracket"].value_counts()/len(df[df["second vote"] == party])).sort_index().to_numpy() for party in df["second vote"].unique()}
-
-    return theta
-
-
-def get_age(voter_df: pd.DataFrame, year_of_survey: int) -> pd.DataFrame:
-    """Calculates the age from the year of birth of each voter.
-    Does not take into account the day and month of birth.
-
-    Parameters
-    ----------
-    voter_df : pd.DataFrame
-        survey data, where each row is one person
-    year_of_survey : int
-        year when the survey was done, needed to see how old people were at that time
-
-    Returns
-    -------
-    pd.DataFrame
-        voter_df but now with added column "age", which represents the age of the voter in years
-
-    Raises
-    ------
-    KeyError
-        if no column for the year of birth is found in voter_df
-    """
-    if "year of birth" not in voter_df:
-        raise KeyError("'year of birth' not found in the dataframe.")
-    def calculate_age(year): return year_of_survey - year
-    voter_df["age"] = voter_df["year of birth"].apply(calculate_age)
-    voter_df.drop("year of birth", axis=1, inplace=True)
-    return voter_df   
-
-
-def get_age_bracket(voter_df: pd.DataFrame) -> pd.DataFrame:
-    """Assigns each voter to an age bracket based on the voters age
-
-    Parameters
-    ----------
-    voter_df : pd.DataFrame
-        survey data, where each row is one person
-
-    Returns
-    -------
-    pd.DataFrame
-        voter_df but now with added column "bracket", which represents the bracket the voter has been assigned
-    """
-    brackets = {(18, 25): 0, (26, 35): 1, (36, 45): 2, (46, 55): 3, (56, 65): 4, (66, 200): 5}
-
-    # finds the bracket for each voter
-    def find_bracket(age): 
-        for (start, end), bracket in brackets.items(): 
-            if start <= age <= end: 
-                return bracket
-            
-    voter_df["Age_Bracket"] = voter_df["age"].apply(find_bracket)
-    # voter_df.drop("age", axis=1, inplace=True)
-    return voter_df
-
-
-def add_age_col_to_voters(voter_df, year):
-    try:
-        year = int(year)
-    except ValueError:
-        raise ValueError(f"'{year}' can't be converted to an integer")
-    df = voter_df.copy()
-    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
-    df.dropna(subset=["year of birth"], inplace=True)
-    df.reset_index(drop=True, inplace=True)
-
-    # --- compute ages & brackets ---
-    df = get_age(df, year)
-    df = get_age_bracket(df)   # adds "bracket" column ∈ {0,…,5}
-    return df
-
-
-def get_age_effect(df: pd.DataFrame,
-                   translated: bool = False) -> Union[Dict[int, np.ndarray], pd.DataFrame]:
-    """
-    Compute age‐bracket vote shares by party.
-    
-    Parameters
-    ----------
-    voter_df : pd.DataFrame
-      Must contain columns "year of birth" and "second vote".
-    year : int or numeric‐string
-      The survey year (for age computation).
-    translated : bool, default False
-      If False, returns a dict mapping party‐codes to arrays of bracket‐shares.
-      If True, returns a DataFrame with columns ["party","bracket","share"].
-    """
-    # --- translation maps ---
-    code2party = {
-        4:  "SPD",
-        1:  "CDU/CSU",
-        6:  "90/Greens",
-        5:  "FDP",
-        322:"AfD",
-        7:  "LINKE",
-    }
-    bracket_labels = {
-        0: "18–25",
-        1: "26–35",
-        2: "36–45",
-        3: "46–55",
-        4: "56–65",
-        5: "66–100",
-    }
-
-    # --- raw theta dict: party‐code → array of bracket‐shares ---
-    theta: Dict[int,np.ndarray] = {
-        party: (
-            df.loc[df["second vote"] == party, "Age_Bracket"]
-              .value_counts(normalize=True)
-              .sort_index()
-              .to_numpy()
-        )
-        for party in df["second vote"].unique()
-    }
-    theta_named = {code2party.get(code, code): shares for code, shares in theta.items()}
-    
-    if not translated:
-        return theta_named
-
-    # --- build a DataFrame from the theta dict ---
-    # rows = party codes, cols = bracket‐ids
-    df_theta = (
-        pd.DataFrame.from_dict(theta, orient="index")
-          .rename_axis("party_code", axis=0)
-          .rename_axis("bracket_id", axis=1)
-          .reset_index()
-    )
-    # map codes → names & bracket_ids → bracket_labels
-    df_theta["party"] = df_theta["party_code"].map(code2party)
-    df_theta = df_theta.rename(columns=bracket_labels)
-    # melt into long form
-    df_long = df_theta.melt(
-        id_vars=["party"],
-        value_vars=list(bracket_labels.values()),
-        var_name="Age_Bracket",
-        value_name="share"
-    )
-    # drop NaN parties if any codes were unexpected
-    df_long = df_long.dropna(subset=["party"]).reset_index(drop=True)
-    return df_long
