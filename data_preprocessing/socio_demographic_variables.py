@@ -195,3 +195,24 @@ def get_age_effect(df: pd.DataFrame,
     # drop NaN parties if any codes were unexpected
     df_long = df_long.dropna(subset=["party"]).reset_index(drop=True)
     return df_long
+
+
+def get_gender_effect(df: pd.DataFrame) -> dict:
+    # move to 0-1 encoding
+    # 0 := male
+    # 1 := female
+    df["gender"] -= 1
+
+    # dict with party codes as keys and shares of male/female voters as values
+    # first entry in array is male share, second is female share
+    theta = {
+        party: (
+            df.loc[df["second vote"] == party, "gender"]
+            .value_counts(normalize=True)
+            .sort_index()
+            .to_numpy()
+        )
+        for party in df["second vote"].unique()
+    }
+
+    return theta
