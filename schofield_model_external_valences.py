@@ -1,22 +1,42 @@
 import pandas as pd
-import numpy as np
 import data_preprocessing.data_preprocess as dp
-import data_preprocessing.sociodemographic_variables_effect as sd
+import numpy as np
 import pipeline_helper_functions.schofield_model_helper as sm
+import pipeline_helper_functions.opinion_dyn_helper as od
+import data_preprocessing.sociodemographic_variables_effect as sd
 import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year = "2025"
-include_sociodemographic_variables = True
+year = "2013"
+include_sociodemographic_variables = False
+CHANGE_OPINION = True
+
+sigma_noise=0.1
+gmm_components=3
+alpha=0.0140
+beta=0.6681
+gamma=2
+time=4
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
 party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=year)
 party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
                                 columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
 party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
-
 voter_centered = sd.add_age_col_to_voters(voter_df=voter_centered, year=year)
+# Fill NaN values with median of the column
+medians = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].median()
+voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].fillna(medians)
+
+x = voter_centered[f"{x_var} Centered"].values
+y = voter_centered[f"{y_var} Centered"].values
+data = np.vstack([x, y])
+
+if CHANGE_OPINION is True:
+    sim = od.run_simulation(data=data, T=time, sigma_noise=sigma_noise, gmm_components=gmm_components, alpha=alpha, beta=beta, gamma=gamma, random_seed=42) 
+    simulated_df = pd.DataFrame(sim.T, columns=[f"{x_var} Centered", f"{y_var} Centered"])
+    voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = simulated_df
 
 # ------------------------------------------------------------- Valences from DATA  ------------------------------------------------------------------------
 lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
@@ -36,8 +56,15 @@ if year == '2025':
 # ------------------------------------------------------ Sociodemographic Variables Preprocessing ------------------------------------------------------------------------------------------------
 ######## -----  AGE  ----- ########
 theta = sd.get_age_effect(voter_centered)
+# pad each array with zeros so they all have length == max_len
+max_len = max(v.size for v in theta.values())
+for party, arr in theta.items():
+    if arr.size < max_len:
+        pad_width = max_len - arr.size
+        theta[party] = np.pad(arr, (0, pad_width), 'constant', constant_values=0)
+
 # Long dataframe format of theta values for each party and age bracket
-theta_df = sd.get_age_effect(voter_centered, translated=True).pivot(index='party', columns='Age_Bracket', values='share')
+theta_df = sd.get_age_effect(voter_centered, translated=True).fillna(0).pivot(index='party', columns='Age_Bracket', values='share')
 print("\n===== theta =====\n")
 print(theta_df)
 
