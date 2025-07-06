@@ -1,4 +1,3 @@
-
 import pandas as pd
 import plotly.express as px
 import numpy as np
@@ -14,7 +13,7 @@ from scipy.spatial import cKDTree
 from scipy.stats import wasserstein_distance
 
 
-def gmm_density(x_input, y_input):
+def gmm_density(x_input, y_input, gmm):
 
     x_flat = np.ravel(x_input)
     y_flat = np.ravel(y_input)
@@ -26,6 +25,7 @@ def gmm_density(x_input, y_input):
         density_vals += weight * rv.pdf(points)
     
     return density_vals.reshape(np.shape(x_input))
+
 
 def gmm_density_and_loggrad(x_input, y_input, gmm):
     x_flat = np.ravel(x_input)
@@ -51,11 +51,13 @@ def gmm_density_and_loggrad(x_input, y_input, gmm):
 
     return grad_log_density
 
+
 def reflect(val, low, high):
     range_size = high - low
     val_shifted = (val - low) % (2 * range_size)
     reflected = np.where(val_shifted < range_size, val_shifted, 2 * range_size - val_shifted)
     return reflected + low
+
 
 def run_simulation(data, T, sigma_noise, gmm_components, alpha, beta, gamma, random_seed=42):
     

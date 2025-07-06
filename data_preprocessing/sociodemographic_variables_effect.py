@@ -3,55 +3,6 @@ import numpy as np
 from typing import Union, Dict
 
 
-def get_age_effect(voter_df: pd.DataFrame, year: str) -> Dict[str, np.ndarray]:
-    """Calculates the theta values for each party j by looking at the percentage
-    of the voters of that party in each bracket, so how many of the voters for party j 
-    are in bracket 0, 1, 2,...
-
-    Parameters
-    ----------
-    voter_df : pd.DataFrame
-        survey data, where each row is one person
-    year : str
-        year when the survey was conducted 
-
-    Returns
-    -------
-    Dict[str, np.ndarray]
-        keys are the parties and the array represents the theta for that party
-        where the i-th index correspons to the i-th bracket.
-        So if 10% of the voters of SPD are in bracket 2, we have
-        theta["SPD"][2] = 0.10
-
-    Raises
-    ------
-    ValueError
-        if the string 'year' can't be converted to an integer
-    """
-    try:
-        year = int(year)
-    except ValueError:
-        raise ValueError(f"'{year}' can't be converted to an integer")
-
-    df = voter_df.copy()
-
-    # try to convert the strings to numeric values, in the later years (>= 2017)
-    # there will be errors (which we coerce) because they have answers of the form
-    # "1930 or earlier", which can't be converted to int. We drop those
-    df["year of birth"] = pd.to_numeric(df["year of birth"], errors="coerce")
-    df.dropna(subset="year of birth", inplace=True, ignore_index=True)
-
-    df = get_age(df, int(year))
-    df = get_age_bracket(df)
-
-    # calculate the bracket shares for each party by counting how many people for a given party are in each bracket
-    # and dividing by total number of people who voted for that party
-    theta = {party: (df[df["second vote"] == party]["bracket"].value_counts(
-    )/len(df[df["second vote"] == party])).sort_index().to_numpy() for party in df["second vote"].unique()}
-
-    return theta
-
-
 def get_age(voter_df: pd.DataFrame, year_of_survey: int) -> pd.DataFrame:
     """Calculates the age from the year of birth of each voter.
     Does not take into account the day and month of birth.
