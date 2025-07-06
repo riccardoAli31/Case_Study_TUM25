@@ -1,13 +1,11 @@
 TODO
-- Finish up opinion dynamics model 
-
-- Create a .py file for the opinion dynamics model to produce a new voter sample
-
-- Use the transformed voter sample to run equilbrium positions of parties
-
 - Introduce new variables to utility function
-    - sociodemographic variables - age, gender, bundesland
-    - check calculations
+    - sociodemographic variables - gender
+    - Add positive constant alpha
     - include calculations in local min function
+
+- Check values of beta 
+
+- plotting function in main pipeline (plot_external_valence_equilibrium) plots saddle positions only
 
 - check how strongly do you incline towards a party is used correctly (flipped values)
