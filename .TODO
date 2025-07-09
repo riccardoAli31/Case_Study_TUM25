@@ -1,7 +1,6 @@
 TODO
 - Introduce new variables to utility function
-    - sociodemographic variables - gender
-    - Add positive constant alpha
+    - Add positive constant alpha (to local min calculation as well or only to saddle?)
     - include calculations in local min function
 
 - Check values of beta 
