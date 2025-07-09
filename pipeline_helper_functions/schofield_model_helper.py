@@ -328,7 +328,7 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
         D_new = -dist2_new              # shape (n, p)
 
         # 7c) Base logit numerator = D_new + lambda_j
-        logit_num = D_new + lambda_values[None, :]   # broadcast λ over rows
+        logit_num = beta * D_new + lambda_values[None, :]   # broadcast λ over rows
 
         # 7d) Optionally add θ_j^T s_i for each (i,j)
         if include_sociodemographic:
@@ -369,7 +369,7 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
 
 
 def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambda_df: pd.DataFrame, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
-                                                target_party_name: str, x_var: str, y_var: str):
+                                                target_party_name: str, x_var: str, y_var: str, beta: int):
     """
     Perform a full 2-D optimization for party `target_party_name` to maximize its average MNL vote share.
     This function does the following steps:
@@ -424,7 +424,7 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
         # shape = (n,)
         dist2_j = np.sum(diff_j**2, axis=1)
         # shape = (n,)
-        U_j = -dist2_j + lambda_values[j_idx]
+        U_j = -beta * dist2_j + lambda_values[j_idx]
 
         U_new = np.zeros((n, p), dtype=float)
         U_new[:, j_idx] = U_j

@@ -181,7 +181,8 @@ for party in local_min_targets:
         party_centered=party_centered2,
         target_party_name=party,
         x_var=x_var,
-        y_var=y_var)
+        y_var=y_var,
+        beta=beta)
     equilibrium_results.append({
         "party":           party,
         "type":            "local_min",
