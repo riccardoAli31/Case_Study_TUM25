@@ -165,22 +165,17 @@ def check_equilibrium_conditions(lambda_df, lambda_values, beta, voter_centered,
     return equilibrium_conditions_df
 
 
-def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, party_centered: pd.DataFrame, lambda_df: pd.DataFrame,
+def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, voter_centered: pd.DataFrame, lambda_df: pd.DataFrame,
                                     x_var: str, y_var: str) -> pd.DataFrame:
 
     # 1a) Compute steady‐state shares rho_j = exp(lambda_j) / sum_k exp(lambda_k)
     expL = np.exp(lambda_values)
     rho = expL / expL.sum()
 
-    # 1b) Compute V* = 1/n sum_i ( [x_i^2, x_i y_i; x_i y_i, y_i^2] ), using centered coords
-    xi_1 = voter_centered[f"{x_var} Centered"].to_numpy()
-    xi_2 = voter_centered[f"{y_var} Centered"].to_numpy()
-    n = len(xi_1)
-
-    Vstar = np.zeros((2, 2), dtype=float)
-    Vstar[0, 0] = np.dot(xi_1, xi_1) / n
-    Vstar[1, 1] = np.dot(xi_2, xi_2) / n
-    Vstar[0, 1] = Vstar[1, 0] = np.dot(xi_1, xi_2) / n
+    # 1b) Compute cov matrix
+    xi1 = voter_centered[f'{x_var} Centered'].values
+    xi2 = voter_centered[f'{y_var} Centered'].values
+    cov = np.cov(np.stack([xi1, xi2]), bias=True)
 
     # 1c) The 2×2 identity
     I2 = np.eye(2)
@@ -196,13 +191,12 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
         Aj = beta * (1 - 2 * rho[i])
 
         # 3b) Build C_j = 2 * A_j * Vstar - I2
-        Cj = 2 * Aj * Vstar - I2
+        Cj = 2 * Aj * cov - I2
 
         # 3c) Compute eigenvalues & eigenvectors of Cj
-        #     We use eigh() since Cj is symmetric. eigh returns them in ascending order, so we'll reverse.
         eigvals, eigvecs = eigh(Cj)
         # eigh returns eigvals sorted: [mu_small, mu_large], and columns of eigvecs are their eigenvectors
-        mu1, mu2 = eigvals[::-1]            # now mu1 >= mu2
+        mu1, mu2 = eigvals[::-1]             # now mu1 >= mu2
         v1 = eigvecs[:, ::-1].T[0]           # eigenvector for mu1
         v2 = eigvecs[:, ::-1].T[1]           # eigenvector for mu2
 
@@ -263,40 +257,31 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
     row = lambda_df[lambda_df["Party_Name"] == target_party_name].iloc[0]
     j_idx = lambda_df.index.get_loc(row.name)
 
-    # 2) Recover Y (n×2) and Z (p×2) from the centered DataFrames:
-    Y = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(
-        dtype=float)   # shape = (n,2)
-    Z = party_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(
-        dtype=float)   # shape = (p,2)
+    # 2) Recover Y (n×2) and Z (p×2) from the centered DataFrames
+    Y = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)   # shape = (n,2)
+    Z = party_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)   # shape = (p,2)
 
-    # 3) Compute ρ from the provided lambda_values:
+    # 3) Compute ρ from the provided lambda_values
     expL = np.exp(lambda_values)
-    rho = expL / expL.sum()   # length‐p array
+    rho = expL / expL.sum()     # length‐p 
 
-    # 4) Build the “electoral covariance” V* from the voter coordinates:
-    xi = voter_centered[f"{x_var} Centered"].to_numpy()
-    yi = voter_centered[f"{y_var} Centered"].to_numpy()
-    n = len(xi)
-
-    Vstar = np.zeros((2, 2), dtype=float)
-    Vstar[0, 0] = np.dot(xi, xi) / n
-    Vstar[1, 1] = np.dot(yi, yi) / n
-    Vstar[0, 1] = Vstar[1, 0] = np.dot(xi, yi) / n
+    # 4) Build the “electoral covariance” from the voter coordinates
+    xi1 = voter_centered[f'{x_var} Centered'].values
+    xi2 = voter_centered[f'{y_var} Centered'].values
+    cov = np.cov(np.stack([xi1, xi2]), bias=True)
 
     I2 = np.eye(2)
 
-    # 5) Characteristic matrix for party j:  C_j = 2·A_j·V* − I₂,  where A_j = β·(1−2ρ_j)
+    # 5) Characteristic matrix for party j
     A = beta * (1 - 2 * rho)    # length‐p
     A_j = A[j_idx]
-    C_j = 2 * A_j * Vstar - I2
+    C_j = 2 * A_j * cov - I2
 
     # 6) Eigen‐decompose C_j; pick the eigenvector for the strictly positive eigenvalue
     eigvals, eigvecs = eigh(C_j)  # eigh returns sorted ascending
     μ_small, μ_large = eigvals[0], eigvals[1]
     if μ_large <= 0:
-        raise RuntimeError(
-            f"Party '{target_party_name}' has no strictly positive eigenvalue (largest eigenvalue = {μ_large:.6f})."
-        )
+        raise RuntimeError(f"Party '{target_party_name}' has no strictly positive eigenvalue (largest eigenvalue = {μ_large:.6f}).")
     # The column eigvecs[:,1] corresponds to μ_large:
     v_pos = eigvecs[:, 1].real
     v_pos = v_pos / np.linalg.norm(v_pos)   # normalize to length 1
@@ -305,7 +290,7 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
     def vote_share_given_t(t_scalar, include_sociodemographic, sociodemographic_matrix, theta_vals) -> float:
         """
         Move party j to (t_scalar * v_pos). Recompute D_new = -||Y − Z_new||²,
-        then form logit-numerators D_new + λ_j + (θ_j^T s_i if include_socio).
+        then form logit-numerators beta*D_new + λ_j + (θ_j^T s_i if include_socio).
         Do a rowwise softmax and return the avg prob that each i chooses j.
 
         Parameters
@@ -327,8 +312,8 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
         dist2_new = ((Y[:, None, :] - Z_new[None, :, :])**2).sum(axis=2)
         D_new = -dist2_new              # shape (n, p)
 
-        # 7c) Base logit numerator = D_new + lambda_j
-        logit_num = beta * D_new + lambda_values[None, :]   # broadcast λ over rows
+        # 7c) Base logit numerator = beta*D_new + lambda_j
+        logit_num = beta * D_new + lambda_values[None, :]   
 
         # 7d) Optionally add θ_j^T s_i for each (i,j)
         if include_sociodemographic:
@@ -359,17 +344,17 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
         x0=np.array([0]),
         args=(include_sociodemographic, sociodemographic_matrix, theta_vals),
         bounds=[bracket],
-        method="L-BFGS-B"
-    )
+        method="L-BFGS-B")
     t_opt = float(result.x[0])
-    share_opt = vote_share_given_t(
-        t_opt, include_sociodemographic, sociodemographic_matrix, theta_vals)
+
+    share_opt = vote_share_given_t(t_opt, include_sociodemographic, sociodemographic_matrix, theta_vals)
 
     return v_pos, t_opt, share_opt
 
 
 def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambda_df: pd.DataFrame, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
-                                                target_party_name: str, x_var: str, y_var: str, beta: int, alpha: int=0):
+                                                target_party_name: str, x_var: str, y_var: str, beta: int, alpha: int=0, include_sociodemographic: bool = False, 
+                                                sociodemographic_matrix: np.ndarray = None, theta_vals: np.ndarray = None):
     """
     Perform a full 2-D optimization for party `target_party_name` to maximize its average MNL vote share.
     This function does the following steps:
@@ -393,10 +378,8 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
     # -------------------------------------
     # Extract Y (n×2) and Z_all (p×2) & find j_idx
     # -------------------------------------
-    Y = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(
-        dtype=float)  # shape = (n,2)
-    Z_all = party_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(
-        dtype=float)  # shape = (p,2)
+    Y = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)  # shape = (n,2)
+    Z_all = party_centered[[f"{x_var} Centered", f"{y_var} Centered"]].to_numpy(dtype=float)  # shape = (p,2)
 
     if target_party_name not in party_centered["Party_Name"].values:
         raise ValueError(
@@ -411,7 +394,7 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
     # -------------------------------------
     # Define vote_share(z): average MNL share if party j sits at z
     # -------------------------------------
-    def vote_share(z_vec: np.ndarray) -> float:
+    def vote_share(z_vec) -> float:
         """
         Compute the average MNL probability that voters pick party j
         when that party’s coordinate is z_vec.
@@ -433,7 +416,14 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
                 continue
             diff_k = Y - Z_all[k]                                    # (n,2)
             dist2_k = np.sum(diff_k**2, axis=1)                      # (n,)
-            U_new[:, k] = -dist2_k + lambda_values[k]                # (n,)
+            U_new[:, k] = -beta*dist2_k + lambda_values[k]           # (n,)
+
+        # Optionally add sociodemographic term
+        if include_sociodemographic:
+            if sociodemographic_matrix is None or theta_vals is None:
+                raise ValueError("Must pass sociodemographic_matrix and theta_vals when include_sociodemographic=True")
+            socio_term = sociodemographic_matrix.dot(theta_vals.T)  
+            U_new += alpha * socio_term
 
         # 2b) Convert U_new → probabilities via rowwise softmax
         row_max = np.max(U_new, axis=1, keepdims=True)               # (n,1)
@@ -457,7 +447,7 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
         # 3a) Build U_new exactly like in vote_share
         diff_j = Y - z_vec
         dist2_j = np.sum(diff_j**2, axis=1)
-        U_j = -dist2_j + lambda_values[j_idx]
+        U_j = -beta * dist2_j + lambda_values[j_idx]
 
         U_new = np.zeros((n, p), dtype=float)
         U_new[:, j_idx] = U_j
@@ -466,7 +456,13 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
                 continue
             diff_k = Y - Z_all[k]
             dist2_k = np.sum(diff_k**2, axis=1)
-            U_new[:, k] = -dist2_k + lambda_values[k]
+            U_new[:, k] = -beta*dist2_k + lambda_values[k]
+
+        if include_sociodemographic:
+            if sociodemographic_matrix is None or theta_vals is None:
+                raise ValueError("Must pass sociodemographic_matrix and theta_vals when include_sociodemographic=True")
+            socio_term = sociodemographic_matrix.dot(theta_vals.T)  
+            U_new += alpha * socio_term
 
         # 3b) Rowwise softmax → probabilities
         row_max = np.max(U_new, axis=1, keepdims=True)
@@ -479,9 +475,9 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
         f_val = np.mean(p_j)
 
         # 3d) Compute gradient: (−2/n) ∑_i (z - x_i) p_j[i] [1 - p_j[i]]
-        w = p_j * (1.0 - p_j)                                   # (n,)
-        weighted_diff = diff_j * w[:, None]                     # (n,2)
-        grad_f = (-2.0 / n) * np.sum(weighted_diff, axis=0)     # (2,)
+        w = p_j * (1.0 - p_j)                                        # (n,)
+        weighted_diff = diff_j * w[:, None]                          # (n,2)
+        grad_f = (-2.0*beta / n) * np.sum(weighted_diff, axis=0)     # (2,)
 
         return -f_val, -grad_f
 
@@ -490,7 +486,6 @@ def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambd
     # -------------------------------------
     neg_f0, neg_grad0 = obj_and_grad(z0)
     f0 = -neg_f0
-    grad0 = -neg_grad0
 
     # -------------------------------------
     # Multi-start optimization
@@ -678,20 +673,19 @@ def plot_equilibrium_positions(all_party_movements_df: pd.DataFrame, equilibrium
     return fig
 
 
-def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, party_centered,
-                                      x_var, y_var, year, model='external', figsize=(13, 13), levels=None):
+def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, party_centered, x_var, y_var, year, figsize=(13, 13), levels=None):
     """
     Plot the voter density, party positions, and equilibrium points for a given model.
 
     Parameters:
-    - equilibrium_results_df: DataFrame containing equilibrium results with columns ['Model', 'party', 'direction_x', 'direction_y', 't_opt']
+    - equilibrium_results_df: DataFrame containing equilibrium results with columns ['Model','party','type','direction_x','direction_y','t_opt','optimal_position']
     - voter_centered: DataFrame with centered voter coordinates, containing f"{x_var} Centered" and f"{y_var} Centered"
     - party_centered: DataFrame with centered party coordinates, containing ['Party_Name', f"{x_var} Centered", f"{y_var} Centered"]
     - x_var: str, name of the x-axis variable (e.g., 'Immigration')
     - y_var: str, name of the y-axis variable (e.g., 'Welfare')
-    - model: str, the model name to filter on (default 'external')
-    - figsize: tuple, size of the figure (default (13,13))
-    - levels: list of floats, contour levels (default [0.25, 0.5, 0.75, 0.95])
+    - year: str/int, the year for the title
+    - figsize: tuple, figure size
+    - levels: list of floats, KDE contour levels
 
     Returns:
     - fig, ax: Matplotlib figure and axes objects
@@ -730,7 +724,8 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         bw_adjust=1.3,
         color='black',
         linewidths=1,
-        linestyles='-', ax=ax)
+        linestyles='-', ax=ax
+    )
 
     # Plot raw voters
     ax.scatter(
@@ -750,7 +745,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         s=200, c='red',
         edgecolor='black', linewidth=1.5,
         zorder=3,
-        label='Party'
+        label='Party Initial'
     )
 
     # Add party labels
@@ -761,6 +756,54 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
             color='white', fontweight='bold',
             zorder=4
         )
+
+    # Compute equilibrium positions by type
+    saddles = equilibrium_results_df[equilibrium_results_df['type'] == 'saddle']
+    mins = equilibrium_results_df[equilibrium_results_df['type'] == 'local_min']
+
+    # Prepare arrays
+    saddle_coords = []
+    for _, er in saddles.iterrows():
+        origin = party_centered.set_index('Party_Name').loc[er['party'], [f"{x_var} Centered", f"{y_var} Centered"]].values
+        v = np.array([er['direction_x'], er['direction_y']])
+        z_opt = origin + er['t_opt'] * v
+        saddle_coords.append(z_opt)
+    if saddle_coords:
+        saddle_coords = np.vstack(saddle_coords)
+        ax.scatter(
+            saddle_coords[:, 0], saddle_coords[:, 1],
+            marker='X', s=200,
+            c='blue', edgecolor='black', linewidth=1.2,
+            zorder=5, label='Saddle Point'
+        )
+        # Label saddles
+        for (x0, y0), (_, er) in zip(saddle_coords, saddles.iterrows()):
+            ax.text(
+                x0, y0, f"{er['party']}",
+                ha='center', va='center',
+                fontsize=10, fontweight='bold', color='black', zorder=6
+            )
+
+    min_coords = []
+    for _, er in mins.iterrows():
+        # optimal_position stored as list-like
+        z_opt = np.array(er['optimal_position'], dtype=float)
+        min_coords.append(z_opt)
+    if min_coords:
+        min_coords = np.vstack(min_coords)
+        ax.scatter(
+            min_coords[:, 0], min_coords[:, 1],
+            marker='*', s=250,
+            c='gold', edgecolor='black', linewidth=1.2,
+            zorder=5, label='Local Minimum'
+        )
+        # Label local minima
+        for (x0, y0), (_, er) in zip(min_coords, mins.iterrows()):
+            ax.text(
+                x0, y0, f"{er['party']}",
+                ha='center', va='center',
+                fontsize=10, fontweight='bold', color='black', zorder=6
+            )
 
     # Crosshair and axis
     ax.axhline(0, color='grey', lw=0.5)
@@ -802,42 +845,12 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
         fontsize=11.5, fontstyle='italic'
     )
 
-    # Title
+    # Title and legend
     ax.set_title(
         f"Voter Density & Party Equilibrium Positions for year {year}",
-        fontsize=16,
-        fontweight='bold',
-        pad=25
+        fontsize=16, fontweight='bold', pad=25
     )
-
-    # Add equilibrium stars and labels
-    pc = party_centered.set_index('Party_Name')
-    for _, er in equilibrium_results_df.iterrows():
-        party = er['party']
-        if party not in pc.index:
-            continue
-
-        origin = pc.loc[party, [
-            f"{x_var} Centered", f"{y_var} Centered"]].values
-        v = np.array([er['direction_x'], er['direction_y']])
-        z_opt = origin + er['t_opt'] * v
-        # needed to plot points that are not in saddles,
-        # but rather local mins
-        # Otherwise we get errors if there are no saddle points
-        if np.any(np.isnan(v)):
-            z_opt = er["optimal_position"]
-
-        ax.scatter(
-            z_opt[0], z_opt[1],
-            marker='*', s=250,
-            c='gold', edgecolor='black', linewidth=1.2,
-            zorder=5, label='_nolegend_'
-        )
-        ax.text(
-            z_opt[0], z_opt[1], f"{party}*",
-            ha='center', va='center',
-            fontsize=10, fontweight='bold', color='black', zorder=6
-        )
+    ax.legend(title='Equilibrium Type', loc='upper right')
 
     plt.tight_layout()
     return fig, ax

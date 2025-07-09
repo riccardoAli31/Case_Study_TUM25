@@ -57,9 +57,9 @@ def get_party_positions_data(file_dir, country, file_name='party_dataset.csv') -
     for col in num_cols:
         df_filtered[col] = df_filtered[col].fillna(0)
     # Preprocessing dataframe - datatypes and awkward column names
+    df_filtered = df_filtered.copy()
     df_filtered["Calendar_Week"] = df_filtered["Calendar_Week"].astype(str)
-    df_filtered['Year'] = (pd.to_datetime(
-        df_filtered['Date'], dayfirst=True).dt.year).astype(str)
+    df_filtered['Year'] = (pd.to_datetime(df_filtered['Date'], dayfirst=True).dt.year).astype(str)
     df_filtered = df_filtered.loc[:, ~
                                   df_filtered.columns.str.startswith("+ per505")]
     common_items_mapping = load_common_variables_mapping(CONFIG_PATH)
