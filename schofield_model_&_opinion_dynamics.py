@@ -51,6 +51,8 @@ lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
 print("\n===== external valences =====\n")
 print(lambda_df)
 
+# alpha: weight for the socio demographic variables
+alpha = 1
 beta = 0.85
 
 # Filter for common parties for 2025 since we don't have new data for party manifesto
@@ -163,7 +165,8 @@ for party in saddle_targets:
         target_party_name=party,
         include_sociodemographic=include_sociodemographic_variables,
         sociodemographic_matrix=S,
-        theta_vals=theta_vals)
+        theta_vals=theta_vals,
+        alpha=alpha)
     equilibrium_results.append({
         "party":        party,
         "type":         "saddle",
@@ -182,7 +185,8 @@ for party in local_min_targets:
         target_party_name=party,
         x_var=x_var,
         y_var=y_var,
-        beta=beta)
+        beta=beta,
+        alpha=alpha)
     equilibrium_results.append({
         "party":           party,
         "type":            "local_min",

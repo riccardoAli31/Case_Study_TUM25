@@ -238,7 +238,7 @@ def compute_characteristic_matrices(lambda_values: np.ndarray, beta: float, vote
 
 
 def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_df: pd.DataFrame, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
-                                             beta: float, x_var: str, y_var: str, target_party_name: str,
+                                             beta: float, x_var: str, y_var: str, target_party_name: str, alpha: int,
                                              include_sociodemographic: bool = False, sociodemographic_matrix: np.ndarray = None,
                                              theta_vals: np.ndarray = None) -> tuple[np.ndarray, float, float]:
     """
@@ -337,7 +337,7 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
                     "Must pass sociodemographic_matrix and theta_vals when include_sociodemographic=True")
             # S: (n, k), theta_vals: (p, k) → socio_term: (n, p)
             socio_term = sociodemographic_matrix.dot(theta_vals.T)
-            logit_num += socio_term
+            logit_num += alpha * socio_term
 
         # 7e) Softmax row-wise
         row_max = np.max(logit_num, axis=1, keepdims=True)
@@ -369,7 +369,7 @@ def compute_optimal_movement_saddle_position(lambda_values: np.ndarray, lambda_d
 
 
 def compute_optimal_movement_local_min_position(lambda_values: np.ndarray, lambda_df: pd.DataFrame, voter_centered: pd.DataFrame, party_centered: pd.DataFrame,
-                                                target_party_name: str, x_var: str, y_var: str, beta: int):
+                                                target_party_name: str, x_var: str, y_var: str, beta: int, alpha: int=0):
     """
     Perform a full 2-D optimization for party `target_party_name` to maximize its average MNL vote share.
     This function does the following steps:
