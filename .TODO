@@ -1,10 +1,4 @@
 TODO
-- Introduce new variables to utility function
-    - Add positive constant alpha (to local min calculation as well or only to saddle?)
-    - include calculations in local min function
-
-- Check values of beta 
-
-- plotting function in main pipeline (plot_external_valence_equilibrium) plots saddle positions only
-
+- Check parameters used for opinion dynamics
+- Experiment with alpha values (2/2.5/3)
 - check how strongly do you incline towards a party is used correctly (flipped values)
