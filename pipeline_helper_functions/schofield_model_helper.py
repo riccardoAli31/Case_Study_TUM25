@@ -821,6 +821,11 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
             f"{x_var} Centered", f"{y_var} Centered"]].values
         v = np.array([er['direction_x'], er['direction_y']])
         z_opt = origin + er['t_opt'] * v
+        # needed to plot points that are not in saddles,
+        # but rather local mins
+        # Otherwise we get errors if there are no saddle points
+        if np.any(np.isnan(v)):
+            z_opt = er["optimal_position"]
 
         ax.scatter(
             z_opt[0], z_opt[1],
