@@ -151,6 +151,11 @@ def get_gesis_data(path: str = "data_folder", lower_cutoff: int = -70, upper_cut
     df[num_cols] = df[num_cols].fillna(df[num_cols].median())
     # df = df.fillna(0)
 
+    # move to 0-1 encoding
+    # 0 := male
+    # 1 := female
+    df["gender"] -= 1
+
     # aggregate the columns of the people who voted and those who didn't
     # to get one single column for the voting decision
     df = aggregate_voting_decision(df)

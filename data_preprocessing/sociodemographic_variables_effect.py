@@ -149,11 +149,14 @@ def get_age_effect(df: pd.DataFrame,
 
 
 def get_gender_effect(df: pd.DataFrame) -> dict:
-    # move to 0-1 encoding
-    # 0 := male
-    # 1 := female
-    df["gender"] -= 1
-
+    code2party = {
+        4:  "SPD",
+        1:  "CDU/CSU",
+        6:  "90/Greens",
+        5:  "FDP",
+        322: "AfD",
+        7:  "LINKE",
+    }
     # dict with party codes as keys and shares of male/female voters as values
     # first entry in array is male share, second is female share
     theta = {
@@ -166,4 +169,7 @@ def get_gender_effect(df: pd.DataFrame) -> dict:
         for party in df["second vote"].unique()
     }
 
-    return theta
+    theta_named = {code2party.get(
+        code, code): shares for code, shares in theta.items()}
+
+    return theta_named

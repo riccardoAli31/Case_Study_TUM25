@@ -8,34 +8,41 @@ import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year = "2013"
-include_sociodemographic_variables = False
-CHANGE_OPINION = True
+year = "2009"
+include_sociodemographic_variables = True
+CHANGE_OPINION = False
 
-sigma_noise=0.1
-gmm_components=3
-alpha=0.0140
-beta=0.6681
-gamma=2
-time=4
+sigma_noise = 0.1
+gmm_components = 3
+alpha = 0.0140
+beta = 0.6681
+gamma = 2
+time = 4
 
 # ------------------------------------------------------------- Data Preprocessing ------------------------------------------------------------------------------------------------
-party_scaled, voter_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=year)
+party_scaled, voter_scaled = dp.get_scaled_party_voter_data(
+    x_var=x_var, y_var=y_var, year=year)
 party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
-                                columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
-party_centered, voter_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
+    columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
+party_centered, voter_centered = dp.center_party_voter_data(
+    voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)
 voter_centered = sd.add_age_col_to_voters(voter_df=voter_centered, year=year)
 # Fill NaN values with median of the column
 medians = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].median()
-voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]].fillna(medians)
+voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = voter_centered[[
+    f"{x_var} Centered", f"{y_var} Centered"]].fillna(medians)
+
+print(voter_centered)
 
 x = voter_centered[f"{x_var} Centered"].values
 y = voter_centered[f"{y_var} Centered"].values
 data = np.vstack([x, y])
 
 if CHANGE_OPINION is True:
-    sim = od.run_simulation(data=data, T=time, sigma_noise=sigma_noise, gmm_components=gmm_components, alpha=alpha, beta=beta, gamma=gamma, random_seed=42) 
-    simulated_df = pd.DataFrame(sim.T, columns=[f"{x_var} Centered", f"{y_var} Centered"])
+    sim = od.run_simulation(data=data, T=time, sigma_noise=sigma_noise,
+                            gmm_components=gmm_components, alpha=alpha, beta=beta, gamma=gamma, random_seed=42)
+    simulated_df = pd.DataFrame(
+        sim.T, columns=[f"{x_var} Centered", f"{y_var} Centered"])
     voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = simulated_df
 
 # ------------------------------------------------------------- Valences from DATA  ------------------------------------------------------------------------
@@ -48,42 +55,55 @@ beta = 0.85
 
 # Filter for common parties for 2025 since we don't have new data for party manifesto
 if year == '2025':
-    parties = sorted(set(lambda_df["Party_Name"]) & set(party_centered["Party_Name"]))
+    parties = sorted(set(lambda_df["Party_Name"])
+                     & set(party_centered["Party_Name"]))
     party_centered = party_centered[party_centered['Party_Name'].isin(parties)]
     lambda_df = lambda_df[lambda_df['Party_Name'].isin(parties)]
     lambda_values = lambda_df["valence"].values
 
 # ------------------------------------------------------ Sociodemographic Variables Preprocessing ------------------------------------------------------------------------------------------------
 ######## -----  AGE  ----- ########
-theta = sd.get_age_effect(voter_centered)
+theta_age = sd.get_age_effect(voter_centered)
 # pad each array with zeros so they all have length == max_len
-max_len = max(v.size for v in theta.values())
-for party, arr in theta.items():
+max_len = max(v.size for v in theta_age.values())
+for party, arr in theta_age.items():
     if arr.size < max_len:
         pad_width = max_len - arr.size
-        theta[party] = np.pad(arr, (0, pad_width), 'constant', constant_values=0)
+        theta_age[party] = np.pad(
+            arr, (0, pad_width), 'constant', constant_values=0)
 
 # Long dataframe format of theta values for each party and age bracket
-theta_df = sd.get_age_effect(voter_centered, translated=True).fillna(0).pivot(index='party', columns='Age_Bracket', values='share')
-print("\n===== theta =====\n")
+theta_df = sd.get_age_effect(voter_centered, translated=True).fillna(
+    0).pivot(index='party', columns='Age_Bracket', values='share')
+print("\n===== theta_age =====\n")
 print(theta_df)
+
+######## -----  GENDER  ----- ########
+theta_gender = sd.get_gender_effect(voter_centered)
 
 # prepare S matrix: an (n_voters × 6) one‐hot matrix for brackets 0…5, leave NaN rows all‐zeros
 ages = voter_centered["Age_Bracket"].to_numpy()
+genders = voter_centered["gender"].to_numpy()
 n = len(ages)
 n_brackets = voter_centered["Age_Bracket"].nunique()
-S = np.zeros((n, n_brackets))
+n_genders = voter_centered["gender"].nunique()
+S = np.zeros((n, n_brackets+n_genders))
 
-for i, a in enumerate(ages):
+for i, (a, g) in enumerate(zip(ages, genders)):
     if not np.isnan(a):
         idx = int(a)
         if 0 <= idx < n_brackets:
             S[i, idx] = 1
+    # male
+    if g == 0:
+        S[i, -2] = 1
+    # female
+    elif g == 1:
+        S[i, -1] = 1
 
 # build the theta_vals matrix by stacking
 ordered = lambda_df.sort_values("class_index")["Party_Name"].tolist()
-theta_vals = np.vstack([theta[p] for p in ordered])
-
+theta_vals = np.vstack([np.concat([theta_age[p], theta_gender[p]]) for p in ordered])
 # --------------------------------------------------------- Equilibrium conditions Check ---------------------------------------------------------------------------------------
 
 equilibrium_conditions_df = sm.check_equilibrium_conditions(lambda_df=lambda_df, lambda_values=lambda_values, beta=beta,
@@ -114,7 +134,8 @@ lambda_df2 = lambda_df.sort_values("class_index").reset_index(drop=True)
 party_order = lambda_df2["Party_Name"]
 indices = lambda_df2["class_index"].to_numpy(dtype=int)
 # re-index by Party_Name
-party_centered2 = party_centered.set_index("Party_Name").loc[party_order].reset_index()
+party_centered2 = party_centered.set_index(
+    "Party_Name").loc[party_order].reset_index()
 all_party_movements2 = all_party_movements_df.drop(columns="class_index").set_index(
     "Party_Name").loc[party_order].reset_index().assign(class_index=indices)
 # reorder array of lambda values
@@ -123,9 +144,11 @@ lambda_values2 = lambda_df2['valence'].values
 # Collect equilibrium results
 equilibrium_results = []
 # automatically pick out which parties need saddle‐point moves
-saddle_targets = all_party_movements2.loc[all_party_movements2["action"].str.contains("Saddle", case=False), "Party_Name"].tolist()
+saddle_targets = all_party_movements2.loc[all_party_movements2["action"].str.contains(
+    "Saddle", case=False), "Party_Name"].tolist()
 # and which ones need local‐min‐point moves
-local_min_targets = all_party_movements2.loc[all_party_movements2["action"].str.contains("local minimum", case=False), "Party_Name"].tolist()
+local_min_targets = all_party_movements2.loc[all_party_movements2["action"].str.contains(
+    "local minimum", case=False), "Party_Name"].tolist()
 
 # --- compute saddle results ---
 for party in saddle_targets:
@@ -164,6 +187,16 @@ for party in local_min_targets:
         "type":            "local_min",
         "optimal_position": z_opt,
         "share_opt":       float(share_opt)})
+
+# so that we always have all columns even though 
+# we don't have any saddle points 
+equilibrium_results.append({
+    "party":        np.nan,
+    "type":         np.nan,
+    "direction_x":  np.nan,
+    "direction_y":  np.nan,
+    "t_opt":        np.nan,
+    "share_opt":    np.nan})
 
 # put it all in one DataFrame
 equilibrium_results_df = pd.DataFrame(equilibrium_results)
