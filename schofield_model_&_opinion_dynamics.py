@@ -8,11 +8,11 @@ import matplotlib.pyplot as plt
 
 x_var = "Opposition to Immigration"
 y_var = "Welfare State"
-year = "2025"
+year = "2009"
 
-include_sociodemographic_variables = True
+include_sociodemographic_variables = False
 
-CHANGE_OPINION = False
+CHANGE_OPINION = True
 sigma_noise = 0.1
 gmm_components = 3
 alpha = 0.0140
@@ -43,18 +43,6 @@ if CHANGE_OPINION is True:
         sim.T, columns=[f"{x_var} Centered", f"{y_var} Centered"])
     voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = simulated_df
 
-    # --- Recalculate party positions from the transformed voter cloud ---
-    party_means = (voter_centered.groupby('Party_Name')[[f"{x_var} Centered", f"{y_var} Centered"]].mean().reset_index()
-                   .rename(columns={f"{x_var} Centered": f'{x_var} Voters_Mean', f"{y_var} Centered": f'{y_var} Voters_Mean'}))
-    mean_df = party_means[[f'{x_var} Voters_Mean', f'{y_var} Voters_Mean', 'Party_Name']].copy()
-    # --- Merge manifesto data with voters mean positions ---
-    party_df = party_centered[['Country', 'Date', 'Calendar_Week', 'Party_Name', f"{x_var} Centered", f"{y_var} Centered"]].rename(
-                columns={f"{x_var} Centered": f'{x_var} Scaled', f"{y_var} Centered": f'{y_var} Scaled'})
-    party_df = party_df.merge(mean_df, on='Party_Name')
-    # --- Final party positions: 0.2*manifesto + 0.8*voters mean ---
-    party_df_simulation = dp.party_position_weighted(df=party_df, x_var=x_var, y_var=y_var)
-    party_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = party_df_simulation[[f'{x_var} Combined', f'{y_var} Combined']]
-
 # ------------------------------------------------------------- Valences from DATA  ------------------------------------------------------------------------
 lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
 
@@ -62,7 +50,7 @@ print("\n===== external valences =====\n")
 print(lambda_df)
 
 # alpha: weight for the socio demographic variables
-alpha = 2
+alpha = 3
 beta = 0.85
 
 # Filter for common parties for 2025 since we don't have new data for party manifesto
