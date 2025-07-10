@@ -10,9 +10,9 @@ x_var = "Opposition to Immigration"
 y_var = "Welfare State"
 year = "2025"
 
-include_sociodemographic_variables = False
+include_sociodemographic_variables = True
 
-CHANGE_OPINION = True
+CHANGE_OPINION = False
 sigma_noise = 0.1
 gmm_components = 3
 alpha = 0.0140
@@ -62,7 +62,7 @@ print("\n===== external valences =====\n")
 print(lambda_df)
 
 # alpha: weight for the socio demographic variables
-alpha = 3
+alpha = 2
 beta = 0.85
 
 # Filter for common parties for 2025 since we don't have new data for party manifesto
