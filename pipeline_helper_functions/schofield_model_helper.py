@@ -816,21 +816,21 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
     # Axis end-labels
     ax.text(
         0, -0.03,
-        f"{x_var} should be easier",
+        f"Immigration should be easier",
         transform=ax.transAxes,
         ha="left", va="top",
         fontsize=11.5, fontstyle='italic'
     )
     ax.text(
         1, -0.03,
-        f"{x_var} should be more difficult",
+        f"Immigration should be more difficult",
         transform=ax.transAxes,
         ha="right", va="top",
         fontsize=11.5, fontstyle='italic'
     )
     ax.text(
         -0.025, 0.88,
-        f"More {y_var.lower()}",
+        f"More welfare",
         transform=ax.transAxes,
         ha="right", va="top",
         rotation=90,
@@ -838,7 +838,7 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
     )
     ax.text(
         -0.025, 0.13,
-        f"Less {y_var.lower()}",
+        f"Less welfare",
         transform=ax.transAxes,
         ha="right", va="bottom",
         rotation=90,
@@ -846,10 +846,10 @@ def plot_external_valence_equilibrium(equilibrium_results_df, voter_centered, pa
     )
 
     # Title and legend
-    ax.set_title(
-        f"Voter Density & Party Equilibrium Positions for year {year}",
-        fontsize=16, fontweight='bold', pad=25
-    )
+    # ax.set_title(
+    #     f"Voter Density & Party Equilibrium Positions for year {year}",
+    #     fontsize=16, fontweight='bold', pad=25
+    # )
     ax.legend(title='Equilibrium Type', loc='upper right')
 
     plt.tight_layout()
