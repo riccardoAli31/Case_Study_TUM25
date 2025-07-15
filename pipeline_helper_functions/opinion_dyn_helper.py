@@ -89,7 +89,7 @@ def run_simulation(data, T, sigma_noise, gmm_components, alpha, beta, gamma, ran
         # Gradient effect
         F_x = gmm_density_and_loggrad(X_t[0, :], X_t[1, :], gmm) 
 
-        # White noise effect
+        # Gaussian white noise effect
         noise = np.random.normal(0, sigma_noise, size=(N, D))
 
         X_next = alpha * weighted_sum - beta * F_x + gamma * noise
