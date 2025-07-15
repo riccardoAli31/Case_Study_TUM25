@@ -43,6 +43,11 @@ if CHANGE_OPINION is True:
         sim.T, columns=[f"{x_var} Centered", f"{y_var} Centered"])
     voter_centered[[f"{x_var} Centered", f"{y_var} Centered"]] = simulated_df
 
+    party_scaled = dp.get_scaled_party_voter_data(x_var=x_var, y_var=y_var, year=str(int(year) + time))[0]
+    party_scaled_df = party_scaled[['Country', 'Date', 'Calendar_Week', 'Party_Name', f'{x_var} Combined', f'{y_var} Combined', 'Label']].rename(
+                                    columns={f'{x_var} Combined': f'{x_var} Scaled', f'{y_var} Combined': f'{y_var} Scaled'})
+    party_centered = dp.center_party_voter_data(voter_df=voter_scaled, party_df=party_scaled_df, x_var=x_var, y_var=y_var)[0]
+
 # ------------------------------------------------------------- Valences from DATA  ------------------------------------------------------------------------
 lambda_values, lambda_df = sm.get_external_valences_independent(year=year)
 
