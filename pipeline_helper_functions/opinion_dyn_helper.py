@@ -12,7 +12,7 @@ from scipy.optimize import minimize
 from scipy.spatial import cKDTree
 from scipy.stats import wasserstein_distance
 
-
+# Computes the density of GMM
 def gmm_density(x_input, y_input, gmm):
 
     x_flat = np.ravel(x_input)
@@ -20,13 +20,15 @@ def gmm_density(x_input, y_input, gmm):
     points = np.column_stack([x_flat, y_flat])
     
     density_vals = np.zeros(len(points))
+    
+    # Sum the weighted PDF from each GMM component
     for weight, mean, cov in zip(gmm.weights_, gmm.means_, gmm.covariances_):
         rv = multivariate_normal(mean=mean, cov=cov)
         density_vals += weight * rv.pdf(points)
     
     return density_vals.reshape(np.shape(x_input))
 
-
+# Computes log-density of a GMM (potential)
 def gmm_density_and_loggrad(x_input, y_input, gmm):
     x_flat = np.ravel(x_input)
     y_flat = np.ravel(y_input)
@@ -36,6 +38,7 @@ def gmm_density_and_loggrad(x_input, y_input, gmm):
     density_vals = np.zeros(N)
     grad = np.zeros_like(points)
 
+    # Iterate through each GMM component
     for weight, mean, cov in zip(gmm.weights_, gmm.means_, gmm.covariances_):
         rv = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
         pdf_vals = rv.pdf(points)
@@ -51,14 +54,14 @@ def gmm_density_and_loggrad(x_input, y_input, gmm):
 
     return grad_log_density
 
-
+# Boundary conditions
 def reflect(val, low, high):
     range_size = high - low
     val_shifted = (val - low) % (2 * range_size)
     reflected = np.where(val_shifted < range_size, val_shifted, 2 * range_size - val_shifted)
     return reflected + low
 
-
+# Actual model
 def run_simulation(data, T, sigma_noise, gmm_components, alpha, beta, gamma, random_seed=42):
     
     np.random.seed(random_seed)
@@ -69,18 +72,24 @@ def run_simulation(data, T, sigma_noise, gmm_components, alpha, beta, gamma, ran
     for t in range(T):
         X_t = history[-1]
 
+        # Small noise to avoid GMM fitting issues when multiple points are duplicate
         X_t_noisy = X_t.T + np.random.normal(scale=1e-6, size=(N, D))
 
+        # Fit GMM
         gmm = GaussianMixture(n_components=gmm_components, covariance_type='full', reg_covar=1e-2)
         gmm.fit(X_t_noisy)
 
+        # Distances for weight
         distances = cdist(X_t_noisy, X_t_noisy, metric='euclidean')
         W = np.exp(-distances ** 2)
         W /= W.sum(axis=1, keepdims=True)
 
         weighted_sum = W @ X_t_noisy 
+        
+        # Gradient effect
         F_x = gmm_density_and_loggrad(X_t[0, :], X_t[1, :], gmm) 
 
+        # White noise effect
         noise = np.random.normal(0, sigma_noise, size=(N, D))
 
         X_next = alpha * weighted_sum - beta * F_x + gamma * noise
@@ -99,6 +108,7 @@ def run_simulation(data, T, sigma_noise, gmm_components, alpha, beta, gamma, ran
     return final_positions
 
 
+# Just some plotting
 def plot_with_simulation_separate(concatenated_df, simulation_points):
 
     print("Data ranges and checks:")
